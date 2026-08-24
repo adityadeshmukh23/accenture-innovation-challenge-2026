@@ -9,7 +9,7 @@ PORT    ?= 8000
 HOST    ?= 127.0.0.1
 
 .DEFAULT_GOAL := help
-.PHONY: help venv install demo run scenarios fit test verify-ledger tamper-demo clean
+.PHONY: help venv install demo run scenarios fit test verify-ledger tamper-demo sync-docs clean
 
 help:
 	@echo ""
@@ -22,6 +22,8 @@ help:
 	@echo "                      running gateway and print the scorecard."
 	@echo "  make fit            Re-fit the calibrated lane models from the corpus."
 	@echo "  make test           Run the unit + end-to-end test suite."
+	@echo "  make sync-docs      Regenerate the README/demo-script figures from the"
+	@echo "                      last run's data/metrics.json."
 	@echo "  make verify-ledger  Independently verify the audit ledger hash chain."
 	@echo "  make tamper-demo    Prove the ledger detects tampering (non-destructive)."
 	@echo "  make clean          Remove venv, data dir and caches."
@@ -58,6 +60,9 @@ scenarios: $(PY)
 
 test: $(PY)
 	@$(PY) -m pytest -q
+
+sync-docs: $(PY)
+	@$(PY) scripts/sync_docs.py
 
 verify-ledger: $(PY)
 	@$(PY) -m aegis.tools.verify_ledger

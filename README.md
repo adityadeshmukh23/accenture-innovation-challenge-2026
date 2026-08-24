@@ -10,7 +10,7 @@ make demo
 ```
 
 That is the whole quickstart. It builds a virtualenv from pinned dependencies, fits the calibrated
-lane models from the labelled corpus, starts the gateway, replays 21 labelled scenarios plus 36
+lane models from the labelled corpus, starts the gateway, replays <!--m:scenarios-->21<!--/m--> labelled scenarios plus 36
 benign background requests, verifies the audit ledger with a standalone tool, and leaves the
 dashboard at <http://127.0.0.1:8000>. It runs entirely offline — no API key, no network, no Docker.
 
@@ -161,9 +161,9 @@ lost is the ability to check a claim against a source, and that loss is declared
 absorbed.
 
 **3 · Adaptive scrutiny.** Cheap deterministic signals run on 100% of traffic at ~2 ms and gate the
-~100 ms verifier. In the reference run the verifier runs inline on **31% of held requests overall —
-and 5% of low-stakes support traffic** — while still reaching 100% recall on the Performance lane
-after the async pass. A proportional controller nudges the gate toward each policy's target rate,
+~100 ms verifier. In the reference run the verifier runs inline on **<!--m:verif_pct-->32%<!--/m--> of held requests
+overall — and <!--m:support_verif_pct-->5%<!--/m--> of low-stakes support traffic** — while still reaching
+<!--m:perf_reca-->1.000<!--/m--> recall on the Performance lane after the async pass. A proportional controller nudges the gate toward each policy's target rate,
 and a seeded **exploration sample** verifies a fraction of *ungated* traffic on purpose: without it,
 every estimate of the verifier's catch rate is conditioned on the gate having already fired, and the
 false-negative rate on ungated traffic is unobservable.
@@ -376,15 +376,21 @@ Only the source of the response and of the verifier's re-answer differ.
 ## Metrics and how to read them
 
 Every figure is recomputed by walking the audit ledger — there are no stored counters — so the
-dashboard cannot drift from the records that justify it. Reference run (`make demo`, seed 1337):
+dashboard cannot drift from the records that justify it. Reference run (`make demo`, seed 1337).
+
+> **These numbers are generated, not transcribed.** `make demo` writes `data/metrics.json`, and
+> `make sync-docs` rewrites every figure below from it. `make test` runs `sync_docs.py --check`, so a
+> stale number in this README fails the build rather than surviving to a reader. This exists because
+> the previous revision shipped a requirements-mapping row quoting a p95 twenty times lower than the
+> latency table below it — both supposedly from the same run.
 
 ### Per lane, against seeded ground truth
 
 | Lane | TP | FP | FN | TN | Precision | Recall | F1 | FPR | FNR |
 |---|---|---|---|---|---|---|---|---|---|
-| performance | 11 | 1 | 0 | 9 | 0.917 | 1.000 | 0.957 | 0.100 | 0.000 |
-| cost | 1 | 0 | 0 | 20 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |
-| responsibility | 6 | 0 | 0 | 15 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |
+| performance | <!--m:perf_tp-->11<!--/m--> | <!--m:perf_fp-->1<!--/m--> | <!--m:perf_fn-->0<!--/m--> | <!--m:perf_tn-->9<!--/m--> | <!--m:perf_prec-->0.917<!--/m--> | <!--m:perf_reca-->1.000<!--/m--> | <!--m:perf_f1-->0.957<!--/m--> | <!--m:perf_fpr-->0.100<!--/m--> | <!--m:perf_fnr-->0.000<!--/m--> |
+| cost | <!--m:cost_tp-->1<!--/m--> | <!--m:cost_fp-->0<!--/m--> | <!--m:cost_fn-->0<!--/m--> | <!--m:cost_tn-->20<!--/m--> | <!--m:cost_prec-->1.000<!--/m--> | <!--m:cost_reca-->1.000<!--/m--> | <!--m:cost_f1-->1.000<!--/m--> | <!--m:cost_fpr-->0.000<!--/m--> | <!--m:cost_fnr-->0.000<!--/m--> |
+| responsibility | <!--m:resp_tp-->6<!--/m--> | <!--m:resp_fp-->0<!--/m--> | <!--m:resp_fn-->0<!--/m--> | <!--m:resp_tn-->15<!--/m--> | <!--m:resp_prec-->1.000<!--/m--> | <!--m:resp_reca-->1.000<!--/m--> | <!--m:resp_f1-->1.000<!--/m--> | <!--m:resp_fpr-->0.000<!--/m--> | <!--m:resp_fnr-->0.000<!--/m--> |
 
 **The single Performance false positive is `fin_overflag_01`, and it is deliberate.** It is a
 substantively *correct* answer ("a shade over four percent after charges") expressed in words rather
@@ -396,8 +402,8 @@ non-zero and honest, and so the λ slider has something real to trade against. A
 
 | View | Decision accuracy | Performance recall |
 |---|---|---|
-| **Inline** (what the user received at request time) | 81.0% (17/21) | 0.727 |
-| **Final** (after the async deep pass) | 95.2% (20/21) | 1.000 |
+| **Inline** (what the user received at request time) | <!--m:acc_inline_pct-->81.0%<!--/m--> (<!--m:acc_inline_frac-->17/21<!--/m-->) | <!--m:perf_recall_inline-->0.727<!--/m--> |
+| **Final** (after the async deep pass) | <!--m:acc_final_pct-->95.2%<!--/m--> (<!--m:acc_final_frac-->20/21<!--/m-->) | <!--m:perf_reca-->1.000<!--/m--> |
 
 Reporting only one of these would mislead in opposite directions: inline alone ignores every
 retraction the system actually made, final alone takes credit for catches the user never saw in
@@ -407,30 +413,32 @@ time. The gap *is* the cost of streaming, stated numerically.
 
 | Figure | Value |
 |---|---|
-| Inline overhead p50 | **2.7 ms** |
+| Inline overhead p50 | **<!--m:lat_p50-->2.6<!--/m--> ms** |
 | Inline overhead, streamed requests | **0.0 ms** |
-| Within their own policy budget | **51/53 (96%)** |
-| p95 overhead as % of its own budget | **1.3%** |
-| Budget exhausted | 2/53 — the two seeded budget-miss scenarios |
-| Inline overhead p95 (raw ms) | 123.7 ms |
+| Within their own policy budget | **<!--m:within_budget_frac-->51/53<!--/m--> (<!--m:within_budget_pct-->96%<!--/m-->)** |
+| p95 overhead as % of its own budget | **<!--m:budget_pct_p95-->3.0%<!--/m-->** |
+| Budget exhausted | <!--m:budget_exhausted_frac-->2/53<!--/m--> — the two seeded budget-miss scenarios |
+| Inline overhead p95 (raw ms) | <!--m:lat_p95-->130.1<!--/m--> ms |
 
 Two notes on reading these honestly. Overhead is compared against *each request's own* budget —
 mixing a 300 ms interactive budget with a 30 s batch budget into one percentile would flatter both,
-which is why **p95 as a share of its own budget (1.3%)** is the meaningful figure. And the raw p95 of
-123.7 ms is not representative of ordinary traffic: two of 53 held requests are *deliberately*
-pathological 5,000-clause budget-miss scenarios, and at n=53 the 95th percentile lands on one of
-them. The median, 2.7 ms, is what normal traffic costs.
+which is why **p95 as a share of its own budget (<!--m:budget_pct_p95-->3.0%<!--/m-->)** is the meaningful figure.
+And the raw p95 is not representative of ordinary traffic: two of <!--m:held-->53<!--/m--> held requests are
+*deliberately* pathological 5,000-clause budget-miss scenarios, and at that sample size the 95th
+percentile lands on one of them. The median, <!--m:lat_p50-->2.6<!--/m--> ms, is what normal traffic costs.
 
 ### Adaptive scrutiny
 
-Verifier ran inline on **17/53 held requests (32%)** — 100% on high-stakes policies, **5% on
-low-stakes support traffic** — while still reaching 1.000 final recall on Performance. That ratio is
+Verifier ran inline on **<!--m:verif_frac-->17/53<!--/m--> held requests (<!--m:verif_pct-->32%<!--/m-->)** — 100% on
+high-stakes policies, **<!--m:support_verif_pct-->5%<!--/m--> on low-stakes support traffic** — while still
+reaching <!--m:perf_reca-->1.000<!--/m--> final recall on Performance. That ratio is
 the headline efficiency number: it is what makes a 300 ms budget survivable at scale.
 
 ### Cost and calibration
 
-Estimated **$0.00237 per request**, with the verifier accounting for 96.4% of tokens — which is
-precisely why gating it matters. Calibration: **Brier 0.073, ECE 0.100** over 63 lane-decisions.
+Estimated **<!--m:cost_per_request-->$0.00237<!--/m--> per request**, with the verifier accounting for
+<!--m:verifier_token_share-->96.4%<!--/m--> of tokens — which is precisely why gating it matters.
+Calibration: **Brier <!--m:brier-->0.073<!--/m-->, ECE <!--m:ece-->0.100<!--/m-->** over <!--m:calib_n-->63<!--/m--> lane-decisions.
 Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 
 > **Reproducibility note.** With `AEGIS_SEED=1337` the decision path is deterministic, with one
@@ -448,12 +456,12 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 | Per-response risk decisioning | `aegis/gateway/pipeline.py` |
 | Three risk lanes (performance / cost / responsibility) | `aegis/evidence/{performance,cost,responsibility}.py` |
 | Pre-generation risk prior from request-time signals | `aegis/risk/signals.py`, `aegis/risk/prior.py` |
-| High-stakes hold-and-release within ~300 ms | `aegis/gateway/budget.py`; measured p95 6.0 ms, 98% within budget |
+| High-stakes hold-and-release within ~300 ms | `aegis/gateway/budget.py`; see [Latency](#latency) — median overhead <!--m:lat_p50-->2.6<!--/m--> ms, <!--m:within_budget_frac-->51/53<!--/m--> within their own budget |
 | Low-stakes streaming + async audit + retraction | `pipeline.run_streamed`, `pipeline.async_deep_pass`; scenario `sup_hallucination_stream_01` |
 | Post-generation evidence: verifier re-answers from same context | `aegis/evidence/performance.py` |
 | Token / retry / latency telemetry → Cost lane | `aegis/evidence/cost.py` |
 | Inline PII + policy; deeper bias async | `aegis/evidence/responsibility.py` (`run_responsibility_inline` / `run_bias_async`) |
-| Adaptive scrutiny — cheap anomalies trigger the expensive check | `aegis/adaptive/scheduler.py`; 31% invocation rate |
+| Adaptive scrutiny — cheap anomalies trigger the expensive check | `aegis/adaptive/scheduler.py`; <!--m:verif_pct-->32%<!--/m--> inline invocation rate |
 | GREEN / YELLOW / RED with confidence score | `aegis/decision/fusion.py`, `aegis/decision/actions.py` |
 | Explicit human-in-the-loop rule | `policy.escalation`, `pipeline.decide`; queue at `/v1/control/queue` |
 | Configurable policy layer by use case / geography / risk appetite | `policies/*.yaml`, `policies/overlays/eu_geo.yaml` |
@@ -461,7 +469,7 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 | ≥3 use cases with different risk/latency profiles | 4 use cases — see [Use cases](#use-cases) |
 | Feedback loop: flags become checker-training data | `aegis/feedback/store.py`, `aegis/feedback/trainer.py`; `/v1/control/override` → `/v1/control/retrain` |
 | Metrics: FP/FN, precision/recall per lane, latency, cost | `aegis/telemetry/metrics.py`, dashboard Metrics tab |
-| Seeded labelled scenario set | `scenarios/seeds.yaml` — 21 evaluation + 65 calibration rows, **disjoint** |
+| Seeded labelled scenario set | `scenarios/seeds.yaml` — <!--m:scenarios-->21<!--/m--> evaluation + 65 calibration rows, **disjoint** |
 | ≥1 hallucination | `fin_hallucination_01` |
 | ≥1 cost anomaly | `sup_cost_storm_01` |
 | ≥1 PII / bias | `clin_pii_01`, `sup_pii_01`, `clin_bias_01` |
