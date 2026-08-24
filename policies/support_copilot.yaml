@@ -1,0 +1,60 @@
+# High-volume, low-value customer support. This is the streaming lane: users
+# see tokens immediately, the full audit runs asynchronously, and anything that
+# fails post-hoc is RETRACTED. Cost is the dominant lane -- retry storms and
+# token spikes are the real operational risk here, not a slightly-off answer.
+name: support_copilot
+version: "1.1"
+description: Customer-support copilot answering order and policy questions.
+geo: US
+extends: default
+
+stakes:
+  base_tier: T0
+  rules:
+    - when: {transaction_value_gte: 2000}
+      tier: T1
+      reason: refund value above auto-approval limit
+    - when: {data_sensitivity_in: [pii, phi]}
+      tier: T1
+      reason: customer PII present
+    - when: {retry_index_gte: 3}
+      tier: T1
+      reason: repeated retries — possible retry storm
+
+latency:
+  hold_budget_ms: 300
+  stream_tiers: [T0]
+  async_deep_budget_ms: 400
+
+lanes:
+  performance:
+    enabled: true
+    lambda: 1.5            # a mildly wrong support answer is cheap to correct
+    hedge_cost: 0.25
+    hedge_efficacy: 0.65
+  cost:
+    enabled: true
+    lambda: 6.0            # retry storms and token spikes are the real risk here
+    hedge_cost: 0.20
+    hedge_efficacy: 0.80
+  responsibility:
+    enabled: true
+    lambda: 3.0
+    hedge_cost: 0.20
+    hedge_efficacy: 0.85
+
+actions:
+  yellow: [redact_pii, append_caveat]
+  red: reroute_safe_template
+
+escalation:
+  human_on_red: true
+  human_on_uncertain_high_stakes: false   # volume too high to escalate uncertainty
+  human_on_lane_disagreement: false
+
+hard_rules: []
+
+adaptive:
+  target_verifier_rate: 0.20   # cheapest lane: verify a fifth of traffic
+  explore_rate: 0.10
+  gate_threshold: 0.35

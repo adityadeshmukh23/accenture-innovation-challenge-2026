@@ -1,0 +1,21 @@
+# Geography overlay. Stacks on top of ANY use-case policy when the request
+# carries geo: EU. Demonstrates that the same code path yields different
+# behaviour under a different regulatory regime.
+name: eu_geo
+version: "1.0"
+description: EU/GDPR overlay — PII is a hard stop, Responsibility lambda raised.
+applies_when:
+  geo: EU
+
+lanes:
+  responsibility:
+    lambda: 12.0            # GDPR exposure raises the cost of a miss
+
+hard_rules:
+  - when: {feature: pii_severity, gte: 0.34}
+    force: RED
+    human: true
+    reason: "GDPR: personal data may not be emitted without a lawful-basis review"
+
+latency:
+  stream_tiers: []          # no streaming before the PII audit completes

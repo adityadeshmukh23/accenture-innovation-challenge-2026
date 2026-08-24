@@ -1,0 +1,50 @@
+# The other end of the latency curve: offline batch document QA with no
+# interactive user. There is no meaningful latency ceiling, so every check
+# runs on every response and the budget never binds.
+name: batch_analytics
+version: "1.0"
+description: Offline batch question-answering over long internal documents.
+geo: US
+extends: default
+
+stakes:
+  base_tier: T2
+  rules: []
+
+latency:
+  hold_budget_ms: 30000     # effectively unbounded
+  stream_tiers: []
+  async_deep_budget_ms: 30000
+
+lanes:
+  performance:
+    enabled: true
+    lambda: 4.0
+    hedge_cost: 0.25
+    hedge_efficacy: 0.65
+  cost:
+    enabled: true
+    lambda: 0.5             # nobody is waiting; spend the tokens
+    hedge_cost: 0.20
+    hedge_efficacy: 0.80
+  responsibility:
+    enabled: true
+    lambda: 4.0
+    hedge_cost: 0.20
+    hedge_efficacy: 0.85
+
+actions:
+  yellow: [strip_unsupported_claims, append_caveat, redact_pii]
+  red: reroute_safe_template
+
+escalation:
+  human_on_red: true
+  human_on_uncertain_high_stakes: true
+  human_on_lane_disagreement: true
+
+hard_rules: []
+
+adaptive:
+  target_verifier_rate: 1.0    # verify everything
+  explore_rate: 0.0
+  gate_threshold: 0.0

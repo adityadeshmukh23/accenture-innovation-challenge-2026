@@ -1,0 +1,65 @@
+# Regulated wealth-advice assistant. A confidently-wrong number here is a
+# suitability breach, so Performance carries the highest lambda in the system.
+name: fintech_advisor
+version: "1.3"
+description: Retail + institutional investment advice over fund fact sheets.
+geo: US
+extends: default
+
+stakes:
+  base_tier: T1
+  rules:
+    - when: {transaction_value_gte: 50000}
+      tier: T2
+      reason: trade size above suitability-review floor
+    - when: {user_tier_in: [institutional]}
+      tier: T2
+      reason: institutional client — fiduciary duty
+    - when: {data_sensitivity_in: [pii, financial]}
+      tier: T2
+      reason: financial PII in request
+    - when: {transaction_value_lt: 500, data_sensitivity_in: [public]}
+      tier: T0
+      reason: general market-education question
+
+latency:
+  hold_budget_ms: 300
+  stream_tiers: [T0]
+  async_deep_budget_ms: 600
+
+lanes:
+  performance:
+    enabled: true
+    lambda: 8.0            # a wrong yield/fee figure is ~8x worse than an over-flag
+    hedge_cost: 0.25
+    hedge_efficacy: 0.65
+  cost:
+    enabled: true
+    lambda: 2.0
+    hedge_cost: 0.20
+    hedge_efficacy: 0.80
+  responsibility:
+    enabled: true
+    lambda: 5.0
+    hedge_cost: 0.20
+    hedge_efficacy: 0.85
+
+actions:
+  yellow: [strip_unsupported_claims, append_caveat, redact_pii]
+  red: reroute_safe_template
+
+escalation:
+  human_on_red: true
+  human_on_uncertain_high_stakes: true
+  human_on_lane_disagreement: true
+
+hard_rules:
+  - when: {feature: guarantee_language, gte: 0.5}
+    force: RED
+    human: true
+    reason: "performance guarantee language is a regulatory hard stop"
+
+adaptive:
+  target_verifier_rate: 0.45
+  explore_rate: 0.10
+  gate_threshold: 0.18

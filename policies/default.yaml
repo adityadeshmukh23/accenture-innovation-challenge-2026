@@ -1,0 +1,75 @@
+# ===========================================================================
+# AEGIS policy — the configurable layer that varies behaviour by use case,
+# geography and risk appetite. Every other policy file inherits from this one.
+#
+# THE KEY IDEA: thresholds are NOT hand-tuned. Each lane declares `lambda`,
+# the ratio cost(false negative) / cost(false positive-on-RED). AEGIS derives
+# the GREEN/YELLOW and YELLOW/RED cut points from that ratio by minimising
+# expected loss:
+#
+#     loss(GREEN)  = p * lambda
+#     loss(YELLOW) = p * (1 - hedge_efficacy) * lambda + (1 - p) * hedge_cost
+#     loss(RED)    = (1 - p) * 1.0
+#
+#     t_yellow = hedge_cost / (hedge_cost + lambda * hedge_efficacy)
+#     t_red    = (1 - hedge_cost) / ((1 - hedge_cost) + lambda * (1 - hedge_efficacy))
+#
+# Changing risk appetite therefore means changing one number, not re-tuning
+# a pile of magic constants.
+# ===========================================================================
+name: default
+version: "1.0"
+description: Balanced baseline for unclassified traffic.
+geo: US
+
+stakes:
+  base_tier: T1
+  rules:
+    - when: {transaction_value_gte: 25000}
+      tier: T2
+      reason: high transaction value
+    - when: {data_sensitivity_in: [pii, phi]}
+      tier: T2
+      reason: sensitive data class in request
+    - when: {transaction_value_lt: 100, data_sensitivity_in: [public]}
+      tier: T0
+      reason: low-value public-data request
+
+latency:
+  hold_budget_ms: 300
+  stream_tiers: [T0]
+  # Tier T2 is allowed to spend more than the standard hold budget.
+  async_deep_budget_ms: 600
+
+lanes:
+  performance:
+    enabled: true
+    lambda: 5.0
+    hedge_cost: 0.25       # cost of an unnecessary caveat/edit, relative to a wrong RED
+    hedge_efficacy: 0.65   # fraction of the harm a YELLOW auto-edit actually removes
+  cost:
+    enabled: true
+    lambda: 2.0
+    hedge_cost: 0.20
+    hedge_efficacy: 0.80
+  responsibility:
+    enabled: true
+    lambda: 6.0
+    hedge_cost: 0.20
+    hedge_efficacy: 0.85   # redaction removes most of the harm, so hedging beats blocking
+
+actions:
+  yellow: [redact_pii, strip_unsupported_claims, append_caveat]
+  red: reroute_safe_template
+
+escalation:
+  human_on_red: true
+  human_on_uncertain_high_stakes: true   # band straddles t_red on a T1/T2 request
+  human_on_lane_disagreement: true       # two lanes disagree on severity
+
+hard_rules: []
+
+adaptive:
+  target_verifier_rate: 0.30   # aim to run the expensive verifier on ~30% of traffic
+  explore_rate: 0.10           # unbiased sample of un-gated traffic, for FN estimation
+  gate_threshold: 0.25         # initial cheap-signal cut point; controller moves it

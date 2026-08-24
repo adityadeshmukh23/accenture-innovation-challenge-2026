@@ -1,0 +1,58 @@
+# Clinical intake summarisation. PHI dominates: the Responsibility lane runs
+# INLINE at every tier, and redaction is a highly effective hedge, so the
+# derived t_red actually sits *above* fintech's — when the hedge works this
+# well, you redact rather than block.
+name: clinical_intake
+version: "2.0"
+description: Summarisation of patient intake notes for a care coordinator.
+geo: US
+extends: default
+
+stakes:
+  base_tier: T2
+  rules:
+    - when: {data_sensitivity_in: [phi, pii]}
+      tier: T2
+      reason: protected health information
+
+latency:
+  hold_budget_ms: 300
+  stream_tiers: []          # never stream PHI before the audit completes
+  async_deep_budget_ms: 700
+
+lanes:
+  performance:
+    enabled: true
+    lambda: 6.0
+    hedge_cost: 0.25
+    hedge_efficacy: 0.60
+  cost:
+    enabled: true
+    lambda: 1.5
+    hedge_cost: 0.20
+    hedge_efficacy: 0.80
+  responsibility:
+    enabled: true
+    lambda: 10.0
+    hedge_cost: 0.20
+    hedge_efficacy: 0.85
+
+actions:
+  yellow: [redact_pii, append_caveat, strip_unsupported_claims]
+  red: reroute_safe_template
+
+escalation:
+  human_on_red: true
+  human_on_uncertain_high_stakes: true
+  human_on_lane_disagreement: true
+
+hard_rules:
+  - when: {feature: dosage_without_disclaimer, gte: 0.5}
+    force: RED
+    human: true
+    reason: "explicit dosage guidance requires clinician sign-off"
+
+adaptive:
+  target_verifier_rate: 0.50
+  explore_rate: 0.10
+  gate_threshold: 0.15
