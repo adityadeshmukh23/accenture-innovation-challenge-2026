@@ -13,7 +13,9 @@ can only be run by the system it is checking is not much of a check.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -34,7 +36,29 @@ CREATE TABLE IF NOT EXISTS ledger (
     hash      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_kind ON ledger(kind);
+CREATE TABLE IF NOT EXISTS ledger_checkpoint (
+    id         INTEGER PRIMARY KEY CHECK (id = 1),
+    count      INTEGER NOT NULL,
+    head       TEXT NOT NULL,
+    updated_at REAL NOT NULL,
+    mac        TEXT NOT NULL DEFAULT ''
+);
 """
+
+
+def checkpoint_mac(count: int, head: str) -> str:
+    """Optional HMAC over the checkpoint.
+
+    Set AEGIS_LEDGER_KEY to a secret this process can read but an operator
+    editing the database cannot. Without it the checkpoint still detects
+    truncation by anyone who forgets to update it in both places, which is the
+    realistic accident and the realistic careless attacker; it does not stop a
+    determined operator who rewrites everything. See README > Limitations.
+    """
+    key = os.environ.get("AEGIS_LEDGER_KEY", "")
+    if not key:
+        return ""
+    return hmac.new(key.encode(), f"{count}|{head}".encode(), hashlib.sha256).hexdigest()
 
 
 def canonical(payload: dict[str, Any]) -> str:
@@ -56,6 +80,35 @@ class Ledger:
         self._conn.executescript(SCHEMA)
         self._conn.commit()
 
+    @property
+    def sidecar_path(self) -> Path:
+        """Checkpoint held OUTSIDE the ledger table.
+
+        A hash chain proves no record was altered or reordered, but says
+        nothing about records that were removed from the END -- deleting the
+        tail leaves a shorter, perfectly valid chain. Truncation needs neither
+        a rewrite nor a re-chain, which the original threat model missed.
+        The checkpoint records how long the chain should be and what its head
+        should be, in two places the ledger table does not control.
+        """
+        return self.path.with_suffix(".head.json")
+
+    def _write_checkpoint(self, count: int, head: str) -> None:
+        mac = checkpoint_mac(count, head)
+        self._conn.execute(
+            "INSERT INTO ledger_checkpoint (id, count, head, updated_at, mac) "
+            "VALUES (1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "count=excluded.count, head=excluded.head, "
+            "updated_at=excluded.updated_at, mac=excluded.mac",
+            (count, head, time.time(), mac))
+        self._conn.commit()
+        try:
+            self.sidecar_path.write_text(json.dumps(
+                {"count": count, "head": head, "updated_at": time.time(), "mac": mac},
+                indent=2))
+        except OSError:
+            pass  # the in-database checkpoint still stands
+
     # -- writing ------------------------------------------------------------ #
     def _append(self, kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
@@ -70,6 +123,7 @@ class Ledger:
                 "INSERT INTO ledger (seq, kind, ts, payload, prev_hash, hash) "
                 "VALUES (?,?,?,?,?,?)", (seq, kind, ts, pj, prev_hash, h))
             self._conn.commit()
+            self._write_checkpoint(seq, h)
             return {"seq": seq, "kind": kind, "ts": ts, "hash": h, "prev_hash": prev_hash}
 
     def append(self, decision) -> dict[str, Any]:
@@ -115,6 +169,14 @@ class Ledger:
     def count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM ledger").fetchone()[0]
 
+    def checkpoint(self) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT count, head, updated_at, mac FROM ledger_checkpoint WHERE id = 1"
+        ).fetchone()
+        if not row:
+            return None
+        return {"count": row[0], "head": row[1], "updated_at": row[2], "mac": row[3]}
+
     def verify(self) -> dict[str, Any]:
         """In-process check. The standalone tool is the authoritative one."""
         rows = self._conn.execute(
@@ -128,6 +190,15 @@ class Ledger:
             if record_hash(seq, kind, ts, pj, stored_prev) != stored_hash:
                 return {"ok": False, "broken_at": seq, "reason": "payload does not match hash"}
             prev = stored_hash
+
+        cp = self.checkpoint()
+        if cp and rows:
+            if cp["count"] != len(rows) or cp["head"] != prev:
+                return {"ok": False, "broken_at": len(rows),
+                        "reason": f"chain is intact but TRUNCATED: checkpoint expects "
+                                  f"{cp['count']} records ending {cp['head'][:16]}…, "
+                                  f"found {len(rows)} ending {prev[:16]}…",
+                        "records": len(rows), "expected": cp["count"]}
         return {"ok": True, "records": len(rows), "head": prev}
 
 

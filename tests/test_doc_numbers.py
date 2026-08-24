@@ -51,3 +51,16 @@ def test_markers_are_invisible_in_rendered_markdown():
         for mo in MARKER.finditer(doc.read_text()):
             assert mo.group(0).startswith("<!--") and mo.group(0).endswith("-->")
             assert "\n" not in mo.group(2), "marker value must stay on one line"
+
+
+def test_timing_figures_tolerate_machine_variation_but_not_contradiction():
+    """Wall-clock numbers differ per machine; a twentyfold gap is still a defect."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from sync_docs import _within_tolerance  # noqa: E402
+
+    assert _within_tolerance("lat_p50", "2.6", "2.5")
+    assert _within_tolerance("lat_p50", "2.6", "5.0")
+    assert not _within_tolerance("lat_p95", "6.0", "124.0"), (
+        "the exact contradiction the review found must still fail")
+    assert not _within_tolerance("perf_prec", "0.917", "0.500"), (
+        "deterministic metrics must match exactly")

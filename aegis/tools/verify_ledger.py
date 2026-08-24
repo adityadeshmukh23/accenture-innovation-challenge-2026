@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import os
 import shutil
@@ -29,6 +30,45 @@ def record_hash(seq: int, kind: str, ts: float, payload_json: str, prev_hash: st
     ).hexdigest()
 
 
+def checkpoint_mac(count: int, head: str) -> str:
+    key = os.environ.get("AEGIS_LEDGER_KEY", "")
+    if not key:
+        return ""
+    return hmac.new(key.encode(), f"{count}|{head}".encode(), hashlib.sha256).hexdigest()
+
+
+def sidecar_for(db_path: str) -> str:
+    base, _ext = os.path.splitext(db_path)
+    return base + ".head.json"
+
+
+def read_checkpoints(db_path: str, conn: sqlite3.Connection) -> list[tuple[str, dict]]:
+    """Checkpoints live in two places: a table, and a file beside the database.
+
+    A hash chain proves nothing was altered or reordered. It says nothing about
+    records removed from the END -- deleting the tail leaves a shorter chain
+    that verifies perfectly. Truncation needs neither a rewrite nor a re-chain,
+    so it needs a length and head recorded somewhere the chain does not govern.
+    """
+    found = []
+    try:
+        row = conn.execute(
+            "SELECT count, head, mac FROM ledger_checkpoint WHERE id = 1").fetchone()
+        if row:
+            found.append(("in-database checkpoint",
+                          {"count": row[0], "head": row[1], "mac": row[2]}))
+    except sqlite3.DatabaseError:
+        pass
+    side = sidecar_for(db_path)
+    if os.path.exists(side):
+        try:
+            with open(side) as fh:
+                found.append(("sidecar " + os.path.basename(side), json.load(fh)))
+        except (OSError, ValueError):
+            pass
+    return found
+
+
 def verify(db_path: str) -> tuple[bool, str, int]:
     if not os.path.exists(db_path):
         return False, f"no ledger at {db_path} — run `make demo` first", 0
@@ -37,10 +77,11 @@ def verify(db_path: str) -> tuple[bool, str, int]:
         rows = conn.execute(
             "SELECT seq, kind, ts, payload, prev_hash, hash FROM ledger ORDER BY seq"
         ).fetchall()
+        checkpoints = read_checkpoints(db_path, conn)
     except sqlite3.DatabaseError as exc:
-        return False, f"unreadable ledger: {exc}", 0
-    finally:
         conn.close()
+        return False, f"unreadable ledger: {exc}", 0
+    conn.close()
 
     prev = GENESIS
     for seq, kind, ts, payload, stored_prev, stored_hash in rows:
@@ -49,7 +90,26 @@ def verify(db_path: str) -> tuple[bool, str, int]:
         if record_hash(seq, kind, ts, payload, stored_prev) != stored_hash:
             return False, f"record {seq} ({kind}) has been altered: payload does not match its hash", len(rows)
         prev = stored_hash
-    return True, f"chain intact — head {prev[:16]}…", len(rows)
+
+    # The chain is internally consistent. Is it COMPLETE?
+    if not checkpoints:
+        return (True,
+                f"chain intact — head {prev[:16]}… (no checkpoint found, so truncation "
+                f"of the tail could not be ruled out)", len(rows))
+
+    for source, cp in checkpoints:
+        if int(cp.get("count", -1)) != len(rows) or cp.get("head") != prev:
+            return (False,
+                    f"chain is internally valid but TRUNCATED — {source} expects "
+                    f"{cp.get('count')} records ending {str(cp.get('head'))[:16]}…, "
+                    f"found {len(rows)} ending {prev[:16]}…", len(rows))
+        expected_mac = checkpoint_mac(len(rows), prev)
+        if expected_mac and cp.get("mac") and cp["mac"] != expected_mac:
+            return False, f"{source} MAC does not verify — checkpoint was forged", len(rows)
+
+    sources = ", ".join(s for s, _ in checkpoints)
+    return (True, f"chain intact and complete — {len(rows)} records, head {prev[:16]}… "
+                  f"(confirmed against {sources})", len(rows))
 
 
 def main() -> int:
@@ -68,8 +128,28 @@ def main() -> int:
             print("\n(need at least 2 records for the tamper demo — run `make demo` first)")
             return 0 if ok else 1
 
+        # ---- attack shape 2: truncate the tail --------------------------
+        tdir = tempfile.mkdtemp()
+        trunc = os.path.join(tdir, "truncated_copy.db")
+        shutil.copy(args.db, trunc)
+        if os.path.exists(sidecar_for(args.db)):
+            shutil.copy(sidecar_for(args.db), sidecar_for(trunc))
+        tconn = sqlite3.connect(trunc)
+        cut = max(1, n - 5)
+        tconn.execute("DELETE FROM ledger WHERE seq > ?", (cut,))
+        tconn.commit()
+        tconn.close()
+        print(f"\n--- tamper demo, shape 2 of 2: TRUNCATION ---------------------")
+        print(f"    deleted the last {n - cut} records from a throwaway copy")
+        print(f"    (needs no rewrite and no re-chain — the remaining chain is valid)")
+        ok3, msg3, n3 = verify(trunc)
+        print(f"\n{'PASS' if ok3 else 'FAIL'}  truncated copy  ({n3} records)\n      {msg3}")
+
+        # ---- attack shape 1: alter a record in place --------------------
         tmp = os.path.join(tempfile.mkdtemp(), "tampered_copy.db")
         shutil.copy(args.db, tmp)
+        if os.path.exists(sidecar_for(args.db)):
+            shutil.copy(sidecar_for(args.db), sidecar_for(tmp))
         conn = sqlite3.connect(tmp)
 
         row = conn.execute(
@@ -97,18 +177,22 @@ def main() -> int:
         conn.commit()
         conn.close()
 
-        print(f"\n--- tamper demo -------------------------------------------------")
-        print(f"    working on a throwaway COPY at {tmp}")
+        print(f"\n--- tamper demo, shape 1 of 2: ALTERATION ---------------------")
         print(f"    record {target}: decision {was!r} -> {record['decision']!r}")
         ok2, msg2, n2 = verify(tmp)
-        print(f"\n{'PASS' if ok2 else 'FAIL'}  tampered copy  ({n2} records)\n      {msg2}")
+        print(f"\n{'PASS' if ok2 else 'FAIL'}  altered copy  ({n2} records)\n      {msg2}")
+
         orig_ok = verify(args.db)[0]
         print(f"\n    original ledger still: {'PASS' if orig_ok else 'FAIL'}")
-        if ok and orig_ok and not ok2:
-            print("\n    Detection works: the altered record broke the chain, and the "
-                  "original\n    ledger was never touched.")
+        if ok and orig_ok and not ok2 and not ok3:
+            print("\n    Detection works for both attack shapes:")
+            print("      - altering a record breaks the hash chain;")
+            print("      - deleting the tail leaves a valid chain, and is caught by the")
+            print("        checkpoint recording how long the chain should be.")
+            print("    The original ledger was never touched.")
             return 0
-        print("\n    UNEXPECTED: tampering was not detected.")
+        print("\n    UNEXPECTED: " + ("truncation" if ok3 else "alteration") +
+              " was not detected.")
         return 1
 
     return 0 if ok else 1

@@ -413,19 +413,19 @@ time. The gap *is* the cost of streaming, stated numerically.
 
 | Figure | Value |
 |---|---|
-| Inline overhead p50 | **<!--m:lat_p50-->2.6<!--/m--> ms** |
+| Inline overhead p50 | **<!--m:lat_p50-->2.5<!--/m--> ms** |
 | Inline overhead, streamed requests | **0.0 ms** |
 | Within their own policy budget | **<!--m:within_budget_frac-->51/53<!--/m--> (<!--m:within_budget_pct-->96%<!--/m-->)** |
-| p95 overhead as % of its own budget | **<!--m:budget_pct_p95-->3.0%<!--/m-->** |
+| p95 overhead as % of its own budget | **<!--m:budget_pct_p95-->1.9%<!--/m-->** |
 | Budget exhausted | <!--m:budget_exhausted_frac-->2/53<!--/m--> — the two seeded budget-miss scenarios |
-| Inline overhead p95 (raw ms) | <!--m:lat_p95-->130.1<!--/m--> ms |
+| Inline overhead p95 (raw ms) | <!--m:lat_p95-->126.1<!--/m--> ms |
 
 Two notes on reading these honestly. Overhead is compared against *each request's own* budget —
 mixing a 300 ms interactive budget with a 30 s batch budget into one percentile would flatter both,
-which is why **p95 as a share of its own budget (<!--m:budget_pct_p95-->3.0%<!--/m-->)** is the meaningful figure.
+which is why **p95 as a share of its own budget (<!--m:budget_pct_p95-->1.9%<!--/m-->)** is the meaningful figure.
 And the raw p95 is not representative of ordinary traffic: two of <!--m:held-->53<!--/m--> held requests are
 *deliberately* pathological 5,000-clause budget-miss scenarios, and at that sample size the 95th
-percentile lands on one of them. The median, <!--m:lat_p50-->2.6<!--/m--> ms, is what normal traffic costs.
+percentile lands on one of them. The median, <!--m:lat_p50-->2.5<!--/m--> ms, is what normal traffic costs.
 
 ### Adaptive scrutiny
 
@@ -456,7 +456,7 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 | Per-response risk decisioning | `aegis/gateway/pipeline.py` |
 | Three risk lanes (performance / cost / responsibility) | `aegis/evidence/{performance,cost,responsibility}.py` |
 | Pre-generation risk prior from request-time signals | `aegis/risk/signals.py`, `aegis/risk/prior.py` |
-| High-stakes hold-and-release within ~300 ms | `aegis/gateway/budget.py`; see [Latency](#latency) — median overhead <!--m:lat_p50-->2.6<!--/m--> ms, <!--m:within_budget_frac-->51/53<!--/m--> within their own budget |
+| High-stakes hold-and-release within ~300 ms | `aegis/gateway/budget.py`; see [Latency](#latency) — median overhead <!--m:lat_p50-->2.5<!--/m--> ms, <!--m:within_budget_frac-->51/53<!--/m--> within their own budget |
 | Low-stakes streaming + async audit + retraction | `pipeline.run_streamed`, `pipeline.async_deep_pass`; scenario `sup_hallucination_stream_01` |
 | Post-generation evidence: verifier re-answers from same context | `aegis/evidence/performance.py` |
 | Token / retry / latency telemetry → Cost lane | `aegis/evidence/cost.py` |
@@ -465,7 +465,7 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 | GREEN / YELLOW / RED with confidence score | `aegis/decision/fusion.py`, `aegis/decision/actions.py` |
 | Explicit human-in-the-loop rule | `policy.escalation`, `pipeline.decide`; queue at `/v1/control/queue` |
 | Configurable policy layer by use case / geography / risk appetite | `policies/*.yaml`, `policies/overlays/eu_geo.yaml` |
-| Every decision writes an audit-trail record | `aegis/audit/ledger.py`; verify with `make verify-ledger` |
+| Every decision writes an audit-trail record | `aegis/audit/ledger.py`; verify with `make verify-ledger`, and `make tamper-demo` proves detection of both alteration and truncation |
 | ≥3 use cases with different risk/latency profiles | 4 use cases — see [Use cases](#use-cases) |
 | Feedback loop: flags become checker-training data | `aegis/feedback/store.py`, `aegis/feedback/trainer.py`; `/v1/control/override` → `/v1/control/retrain` |
 | Metrics: FP/FN, precision/recall per lane, latency, cost | `aegis/telemetry/metrics.py`, dashboard Metrics tab |
@@ -504,6 +504,14 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
    300 ms budget is enforced against genuine work — nothing sleeps to simulate a delay.
 6. **Single process, in-memory state.** Cost baselines, the adaptive gate and the SSE bus live in one
    process; the ledger and labels are on disk.
+7. **The ledger's threat model is two-shaped.** A hash chain catches a record that was *altered* or
+   *reordered*. It cannot see a record that was *removed from the end* — deleting the tail leaves a
+   shorter chain that verifies perfectly, and needs neither a rewrite nor a re-chain. So the ledger
+   also records how long the chain should be and what its head should be, in two places the chain
+   does not govern: a checkpoint table and a sidecar file beside the database. `make tamper-demo`
+   demonstrates both attacks being caught. What this does *not* defend against is an operator who
+   updates all three consistently; that needs an external anchor, and `AEGIS_LEDGER_KEY` is the
+   hook for it.
 
 ---
 
@@ -536,7 +544,7 @@ behind the same `ClaimTrace` interface — the trace structure and dashboard alr
 | Cost baselines are per-process and in-memory; they reset on restart | shared baseline store (Redis), per-tenant segmentation, drift alarms |
 | One override moves a weight ~0.03 and will not flip a decision alone | this is correct behaviour, but production would batch reviews and show operators when a threshold is about to move |
 | No authentication, rate limiting or multi-tenancy | API keys, per-tenant policy binding, quotas |
-| Ledger is append-only SQLite, verifiable but locally held | WORM storage or external anchoring so an operator with disk access cannot rewrite *and* re-chain |
+| Ledger checkpoint is stored next to the data it protects, so an operator with disk access who updates all three places (records, checkpoint table, sidecar file) is still undetected. Setting `AEGIS_LEDGER_KEY` adds an HMAC the checkpoint cannot be forged without | WORM storage or external anchoring — publish the head hash somewhere the operator does not control |
 | `docker-compose.yml` ships but is **untested** — Docker was unavailable on the development machine | verified container build in CI; `make demo` is the supported path today |
 | Async deep pass runs on every response, doubling verifier compute | sampled for high-volume tiers; the policy field to control it already exists |
 

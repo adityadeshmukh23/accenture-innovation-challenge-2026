@@ -40,6 +40,31 @@ def metrics_path() -> Path | None:
 
 MARKER = re.compile(r"<!--m:([a-z0-9_]+)-->(.*?)<!--/m-->", re.S)
 
+#: Wall-clock figures differ between machines and between runs on the same
+#: machine. `--check` allows these to drift within a factor of TIMING_TOLERANCE
+#: so a clean clone on different hardware does not fail its own build; `sync`
+#: still rewrites them exactly. Everything else -- counts, precision, recall,
+#: accuracy -- must match to the character, because those are deterministic
+#: given the seed and a disagreement there is a real defect.
+#:
+#: This still catches the failure that motivated the tool: a documented p95 of
+#: 6.0 ms against a measured 124 ms is a factor of twenty, not of two.
+TIMING_METRICS = {"lat_p50", "lat_p95", "budget_pct_p95"}
+TIMING_TOLERANCE = 3.0
+
+
+def _within_tolerance(name: str, current: str, want: str) -> bool:
+    if name not in TIMING_METRICS:
+        return False
+    nums = [re.sub(r"[^0-9.]", "", s) for s in (current, want)]
+    try:
+        a, b = (float(n) for n in nums)
+    except ValueError:
+        return False
+    if a <= 0 or b <= 0:
+        return a == b
+    return 1 / TIMING_TOLERANCE <= a / b <= TIMING_TOLERANCE
+
 
 def values(m: dict) -> dict[str, str]:
     lanes, inline = m["lanes"], m["lanes_inline"]
@@ -112,6 +137,8 @@ def process(check_only: bool) -> int:
                 return mo.group(0)
             want = vals[name]
             if current != want:
+                if check_only and _within_tolerance(name, current, want):
+                    return mo.group(0)     # timing jitter, not drift
                 problems.append(f"{doc.name}: {name} is {current!r}, run says {want!r}")
                 updated += 1
             return f"<!--m:{name}-->{want}<!--/m-->"
