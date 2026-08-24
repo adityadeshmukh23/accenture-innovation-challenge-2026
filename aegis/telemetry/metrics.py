@@ -15,8 +15,12 @@ from typing import Any
 
 import numpy as np
 
+from ..adaptive.scheduler import SCHEDULER
 from ..audit.ledger import LEDGER
-from ..decision.fusion import brier, expected_calibration_error
+from ..decision.fusion import MODELS, brier, expected_calibration_error
+from ..evidence.cost import BASELINES
+from ..feedback.store import LABELS
+from ..gateway.budget import COSTS
 from ..types import Lane
 
 
@@ -203,6 +207,7 @@ def compute(limit: int = 1000) -> dict[str, Any]:
             "flagged_among_verified": caught_by_verifier,
             "by_policy": {k: {**v, "rate": round(v["verified"] / max(1, v["held"]), 4)}
                           for k, v in sorted(by_policy.items())},
+            "scheduler": SCHEDULER.snapshot(),
         },
         "cost": {
             "estimated_total_usd": round(sum(micros) / 1e6, 6),
@@ -214,4 +219,12 @@ def compute(limit: int = 1000) -> dict[str, Any]:
                     int(d.get("usage", {}).get("total_tokens", 0)) for d in decisions)), 4),
         },
         "calibration": calib,
+        "cost_model": {**COSTS.snapshot(), "verifier_params": COSTS.verifier_params()},
+        "baselines": BASELINES.snapshot(),
+        "labels": LABELS.counts(),
+        "models": {
+            l.value: {"fitted": mo.fitted, "n_train": mo.n_train, "l2": mo.l2,
+                      "metrics": mo.metrics}
+            for l, mo in MODELS.models.items()
+        },
     }

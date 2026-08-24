@@ -63,3 +63,22 @@ def test_tamper_demo_leaves_the_original_untouched():
     conn.close()
     assert not standalone.verify(str(copy))[0]
     assert standalone.verify(str(led.path))[0]
+
+
+def test_tamper_demo_makes_a_real_change_and_detects_it(capsys, monkeypatch):
+    """The demo must actually alter something.
+
+    It previously set `decision` to the value the record already held, which
+    left the bytes identical -- so the chain still verified and the demo
+    silently proved nothing.
+    """
+    led = make_ledger(0)
+    for d in ("GREEN", "GREEN", "GREEN", "RED"):
+        led.append_event("decision", {"request_id": f"x{d}", "decision": d})
+    monkeypatch.setattr("sys.argv", ["verify_ledger", "--db", str(led.path), "--demo-tamper"])
+    rc = standalone.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Detection works" in out
+    assert "->" in out and "has been altered" in out
+    assert standalone.verify(str(led.path))[0], "original ledger must be untouched"

@@ -7,13 +7,9 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from ..adaptive.scheduler import SCHEDULER
 from ..audit.ledger import LEDGER
 from ..decision.fusion import MODELS
 from ..decision.policy import POLICIES, derive_thresholds
-from ..evidence.cost import BASELINES
-from ..feedback.store import LABELS
-from ..gateway.budget import COSTS
 from ..telemetry import events, metrics
 from ..types import Lane
 
@@ -44,23 +40,23 @@ async def event_stream():
 
 @router.get("/metrics")
 async def get_metrics() -> dict[str, Any]:
-    m = metrics.compute()
-    m["adaptive"]["scheduler"] = SCHEDULER.snapshot()
-    m["cost_model"] = COSTS.snapshot()
-    m["baselines"] = BASELINES.snapshot()
-    m["labels"] = LABELS.counts()
-    m["models"] = {
-        l.value: {"fitted": mo.fitted, "n_train": mo.n_train, "l2": mo.l2,
-                  "metrics": mo.metrics}
-        for l, mo in MODELS.models.items()
-    }
-    return m
+    # No enrichment here on purpose: metrics.compute() is the single source of
+    # truth, so tests/test_dashboard_contract.py checks the same shape the
+    # dashboard actually receives.
+    return metrics.compute()
 
 
 @router.get("/decisions")
 async def decisions(limit: int = 60) -> dict[str, Any]:
     recs = LEDGER.records(kind="decision", limit=limit)
     return {"items": [{"seq": r["seq"], "ts": r["ts"], **r["payload"]} for r in recs]}
+
+
+@router.get("/deep_audits")
+async def deep_audits(limit: int = 200) -> dict[str, Any]:
+    """Full async-deep-pass payloads, so a dashboard loading fresh sees
+    retractions and post-hoc escalations that happened before it connected."""
+    return {"items": [r["payload"] for r in LEDGER.records(kind="deep_audit", limit=limit)]}
 
 
 @router.get("/decision/{request_id}")

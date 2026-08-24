@@ -119,10 +119,41 @@ async def override(req: OverrideRequest) -> dict[str, Any]:
 
 @router.post("/retrain")
 async def retrain() -> dict[str, Any]:
-    """Refit the lane models including human feedback; return before/after weights."""
+    """Refit the lane models including human feedback; return before/after weights.
+
+    Also replays every human-labelled request through the OLD and NEW models so
+    the effect is visible, not just the weight deltas. One correction against a
+    65-row corpus moves a weight by ~0.03 and usually does not flip a decision
+    on its own -- which is the correct behaviour, and worth showing plainly
+    rather than implying a single click retrains the system.
+    """
+    from ..decision.fusion import LaneModel
+
+    before_models = {l: LaneModel.from_dict(m.to_dict()) for l, m in MODELS.models.items()}
     before = MODELS.snapshot_weights()
     result = trainer.retrain_with_feedback()
     after = MODELS.snapshot_weights()
+
+    replay = []
+    for row in LABELS.rows(sources=["human_override", "human_confirm"]):
+        entry = {"request_id": row["request_id"], "source": row["source"], "lanes": {}}
+        for lane_name, feats in (row.get("features") or {}).items():
+            try:
+                lane = Lane(lane_name)
+            except ValueError:
+                continue
+            p_before = before_models[lane].predict(feats)
+            p_after = MODELS.get(lane).predict(feats)
+            if abs(p_after - p_before) < 1e-6:
+                continue
+            entry["lanes"][lane_name] = {
+                "p_before": round(p_before, 4),
+                "p_after": round(p_after, 4),
+                "delta": round(p_after - p_before, 4),
+                "label": row.get("labels", {}).get(lane_name),
+            }
+        if entry["lanes"]:
+            replay.append(entry)
 
     deltas: dict[str, dict[str, float]] = {}
     for lane, a in after.items():
@@ -131,7 +162,8 @@ async def retrain() -> dict[str, Any]:
         d["__bias__"] = round(a["bias"] - b.get("bias", 0.0), 4)
         deltas[lane] = {k: v for k, v in d.items() if abs(v) > 1e-6}
 
-    payload = {"before": before, "after": after, "deltas": deltas, "training": result}
+    payload = {"before": before, "after": after, "deltas": deltas,
+               "training": result, "replay": replay}
     LEDGER.append_event("model_retrain", {
         "n_train": {k: v["n_train"] for k, v in after.items()},
         "deltas": deltas, "metrics": result.get("metrics", {}),

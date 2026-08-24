@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import shutil
 import sqlite3
@@ -66,20 +67,49 @@ def main() -> int:
         if n < 2:
             print("\n(need at least 2 records for the tamper demo — run `make demo` first)")
             return 0 if ok else 1
+
         tmp = os.path.join(tempfile.mkdtemp(), "tampered_copy.db")
         shutil.copy(args.db, tmp)
         conn = sqlite3.connect(tmp)
-        target = conn.execute("SELECT seq FROM ledger ORDER BY seq LIMIT 1 OFFSET ?",
-                              (n // 2,)).fetchone()[0]
-        conn.execute("UPDATE ledger SET payload = json_set(payload, '$.decision', 'GREEN') "
-                     "WHERE seq = ?", (target,))
+
+        row = conn.execute(
+            "SELECT seq, payload FROM ledger WHERE kind='decision' "
+            "AND payload LIKE '%\"decision\"%' ORDER BY seq LIMIT 1 OFFSET ?",
+            (max(0, n // 4),)).fetchone()
+        if row is None:
+            row = conn.execute("SELECT seq, payload FROM ledger ORDER BY seq LIMIT 1").fetchone()
+        target, payload = row
+
+        # Flip the verdict to something it is NOT. Setting it to the value it
+        # already held would leave the bytes untouched and the chain would
+        # legitimately still verify -- a tamper demo that tampers with nothing
+        # proves nothing.
+        record = json.loads(payload)
+        was = record.get("decision")
+        record["decision"] = "GREEN" if was != "GREEN" else "RED"
+        mutated = json.dumps(record, sort_keys=True, separators=(",", ":"), default=str)
+        if mutated == payload:
+            print("\ntamper demo could not produce a real change — aborting rather than "
+                  "reporting a detection that did not happen")
+            conn.close()
+            return 1
+        conn.execute("UPDATE ledger SET payload = ? WHERE seq = ?", (mutated, target))
         conn.commit()
         conn.close()
-        print(f"\n--- tamper demo: flipped record {target}'s decision to GREEN in a throwaway copy ---")
+
+        print(f"\n--- tamper demo -------------------------------------------------")
+        print(f"    working on a throwaway COPY at {tmp}")
+        print(f"    record {target}: decision {was!r} -> {record['decision']!r}")
         ok2, msg2, n2 = verify(tmp)
-        print(f"{'PASS' if ok2 else 'FAIL'}  {tmp}  ({n2} records)\n      {msg2}")
-        print(f"\nOriginal ledger untouched: {'PASS' if verify(args.db)[0] else 'FAIL'}")
-        return 0 if (ok and not ok2) else 1
+        print(f"\n{'PASS' if ok2 else 'FAIL'}  tampered copy  ({n2} records)\n      {msg2}")
+        orig_ok = verify(args.db)[0]
+        print(f"\n    original ledger still: {'PASS' if orig_ok else 'FAIL'}")
+        if ok and orig_ok and not ok2:
+            print("\n    Detection works: the altered record broke the chain, and the "
+                  "original\n    ledger was never touched.")
+            return 0
+        print("\n    UNEXPECTED: tampering was not detected.")
+        return 1
 
     return 0 if ok else 1
 

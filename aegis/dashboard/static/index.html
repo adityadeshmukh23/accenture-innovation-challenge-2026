@@ -1,1 +1,167 @@
-<h1>AEGIS</h1>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AEGIS — LLM policy gateway</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header>
+  <div class="logo">AEGIS<span>.</span></div>
+  <div class="tag">backend <b id="h-backend">…</b></div>
+  <div class="tag">seed <b id="h-seed">…</b></div>
+  <div class="tag">models <b id="h-models">…</b></div>
+  <div class="spacer"></div>
+  <div class="tag">ledger <b id="h-ledger">…</b></div>
+  <div class="tag" id="h-live">● connecting</div>
+</header>
+
+<nav>
+  <button data-v="live" class="on">Live decisions</button>
+  <button data-v="metrics">Metrics</button>
+  <button data-v="queue">Human queue</button>
+  <button data-v="policy">Policy &amp; thresholds</button>
+  <button data-v="audit">Audit ledger</button>
+</nav>
+
+<main>
+  <!-- ------------------------------------------------------------- LIVE -->
+  <section class="view on" id="v-live">
+    <div class="grid cols2" style="grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)">
+      <div class="card" style="max-height:80vh;overflow:auto">
+        <h3>Request feed <span class="sub" id="feed-count"></span></h3>
+        <table>
+          <thead><tr>
+            <th>scenario / id</th><th>use case</th><th>tier</th><th>decision</th>
+            <th class="right">conf</th><th class="right">budget</th><th>verif</th>
+          </tr></thead>
+          <tbody id="feed"></tbody>
+        </table>
+        <div class="empty" id="feed-empty">
+          No traffic yet — run <span class="mono">make scenarios</span>.
+        </div>
+      </div>
+      <div id="detail"><div class="card"><div class="empty">
+        Select a request to see its reasoning trace, latency budget and lane scores.
+      </div></div></div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------- METRICS -->
+  <section class="view" id="v-metrics">
+    <div class="grid cols3" style="margin-bottom:14px">
+      <div class="card"><div class="stat">
+        <div class="lbl">End-to-end accuracy</div>
+        <div class="big" id="m-acc">—</div>
+        <div class="sub" id="m-acc-sub"></div></div></div>
+      <div class="card"><div class="stat">
+        <div class="lbl">Inline overhead p95</div>
+        <div class="big" id="m-lat">—</div>
+        <div class="sub" id="m-lat-sub"></div></div></div>
+      <div class="card"><div class="stat">
+        <div class="lbl">Verifier invocation rate</div>
+        <div class="big" id="m-verif">—</div>
+        <div class="sub" id="m-verif-sub"></div></div></div>
+    </div>
+    <div class="grid cols2">
+      <div class="card">
+        <h3>Per-lane vs seeded ground truth
+          <span class="sub">final = after the async deep pass</span></h3>
+        <table><thead><tr><th>lane</th><th class="right">TP</th><th class="right">FP</th>
+          <th class="right">FN</th><th class="right">TN</th><th class="right">precision</th>
+          <th class="right">recall</th><th class="right">F1</th><th class="right">FPR</th>
+          <th class="right">FNR</th></tr></thead>
+          <tbody id="m-lanes"></tbody></table>
+        <h3 style="margin-top:14px">Inline only <span class="sub">what the user received at request time</span></h3>
+        <table><thead><tr><th>lane</th><th class="right">TP</th><th class="right">FP</th>
+          <th class="right">FN</th><th class="right">TN</th><th class="right">precision</th>
+          <th class="right">recall</th></tr></thead>
+          <tbody id="m-lanes-inline"></tbody></table>
+      </div>
+      <div class="card">
+        <h3>Latency &amp; budget</h3><div class="kv" id="m-latency"></div>
+        <h3 style="margin-top:14px">Adaptive scrutiny <span class="sub">per policy</span></h3>
+        <div class="kv" id="m-adaptive"></div>
+        <h3 style="margin-top:14px">Cost per check</h3><div class="kv" id="m-cost"></div>
+        <h3 style="margin-top:14px">Calibration</h3><div class="kv" id="m-calib"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ QUEUE -->
+  <section class="view" id="v-queue">
+    <div class="grid cols2" style="grid-template-columns:minmax(0,1fr) minmax(0,.95fr)">
+      <div class="card">
+        <h3>Awaiting human review <span class="sub" id="q-count"></span></h3>
+        <div id="queue"></div>
+      </div>
+      <div class="card">
+        <h3>Checker training loop</h3>
+        <p class="muted" style="font-size:12px;margin-top:0">
+          Every confirm and every override is written to
+          <span class="mono">feedback_labels.jsonl</span> with the exact feature vector
+          that produced the decision, then folded into the next fit.
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+          <button class="act pri" id="btn-retrain">Retrain from feedback</button>
+          <span class="muted mono" id="retrain-status"></span>
+        </div>
+        <div id="retrain-out"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------------- POLICY -->
+  <section class="view" id="v-policy">
+    <div class="card" style="margin-bottom:14px">
+      <h3>Threshold derivation <span class="sub">move λ, watch the cut points move</span></h3>
+      <div class="grid cols3">
+        <div>
+          <div class="muted" style="font-size:12px">λ = cost(false negative) / cost(false positive)</div>
+          <input type="range" id="lam" min="0.5" max="20" step="0.1" value="8">
+          <div class="mono" id="lam-v">λ = 8.0</div>
+          <div class="muted" style="font-size:12px;margin-top:8px">hedge cost α</div>
+          <input type="range" id="alpha" min="0.05" max="0.9" step="0.01" value="0.25">
+          <div class="mono" id="alpha-v">α = 0.25</div>
+          <div class="muted" style="font-size:12px;margin-top:8px">hedge efficacy η</div>
+          <input type="range" id="eta" min="0.05" max="0.95" step="0.01" value="0.65">
+          <div class="mono" id="eta-v">η = 0.65</div>
+        </div>
+        <div style="grid-column:span 2">
+          <div class="kv" id="thr-out"></div>
+          <div style="margin-top:12px">
+            <div class="budget-bar" style="height:34px" id="thr-bar"></div>
+            <div class="budget-legend">
+              <span><i style="background:#3fb950"></i>GREEN deliver</span>
+              <span><i style="background:#d29922"></i>YELLOW auto-edit</span>
+              <span><i style="background:#f85149"></i>RED hold + escalate</span>
+            </div>
+          </div>
+          <p class="muted" style="font-size:12px">
+            A higher λ pushes both cut points down. A more effective hedge pushes the RED
+            cut point <em>up</em> — when editing actually works, you edit rather than block.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div id="policies" class="grid cols2"></div>
+  </section>
+
+  <!-- ------------------------------------------------------------ AUDIT -->
+  <section class="view" id="v-audit">
+    <div class="card">
+      <h3>Hash-chained audit ledger <span class="sub" id="a-integrity"></span></h3>
+      <p class="muted" style="font-size:12px;margin-top:0">
+        Verify it yourself, without this app:
+        <span class="mono">make verify-ledger</span> — or prove detection works with
+        <span class="mono">make tamper-demo</span>.
+      </p>
+      <table><thead><tr><th>seq</th><th>kind</th><th>request</th><th>summary</th>
+        <th>prev_hash</th><th>hash</th></tr></thead><tbody id="audit"></tbody></table>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
