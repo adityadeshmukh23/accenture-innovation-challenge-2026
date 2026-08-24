@@ -433,19 +433,19 @@ time. The gap *is* the cost of streaming, stated numerically.
 
 | Figure | Value |
 |---|---|
-| Inline overhead p50 | **<!--m:lat_p50-->2.5<!--/m--> ms** |
+| Inline overhead p50 | **<!--m:lat_p50-->2.3<!--/m--> ms** |
 | Inline overhead, streamed requests | **0.0 ms** |
 | Within their own policy budget | **<!--m:within_budget_frac-->51/53<!--/m--> (<!--m:within_budget_pct-->96%<!--/m-->)** |
-| p95 overhead as % of its own budget | **<!--m:budget_pct_p95-->1.9%<!--/m-->** |
+| p95 overhead as % of its own budget | **<!--m:budget_pct_p95-->1.8%<!--/m-->** |
 | Budget exhausted | <!--m:budget_exhausted_frac-->2/53<!--/m--> — the two seeded budget-miss scenarios |
-| Inline overhead p95 (raw ms) | <!--m:lat_p95-->126.1<!--/m--> ms |
+| Inline overhead p95 (raw ms) | <!--m:lat_p95-->125.2<!--/m--> ms |
 
 Two notes on reading these honestly. Overhead is compared against *each request's own* budget —
 mixing a 300 ms interactive budget with a 30 s batch budget into one percentile would flatter both,
-which is why **p95 as a share of its own budget (<!--m:budget_pct_p95-->1.9%<!--/m-->)** is the meaningful figure.
+which is why **p95 as a share of its own budget (<!--m:budget_pct_p95-->1.8%<!--/m-->)** is the meaningful figure.
 And the raw p95 is not representative of ordinary traffic: two of <!--m:held-->53<!--/m--> held requests are
 *deliberately* pathological 5,000-clause budget-miss scenarios, and at that sample size the 95th
-percentile lands on one of them. The median, <!--m:lat_p50-->2.5<!--/m--> ms, is what normal traffic costs.
+percentile lands on one of them. The median, <!--m:lat_p50-->2.3<!--/m--> ms, is what normal traffic costs.
 
 ### Adaptive scrutiny
 
@@ -476,7 +476,7 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 | Per-response risk decisioning | `aegis/gateway/pipeline.py` |
 | Three risk lanes (performance / cost / responsibility) | `aegis/evidence/{performance,cost,responsibility}.py` |
 | Pre-generation risk prior from request-time signals | `aegis/risk/signals.py`, `aegis/risk/prior.py` |
-| High-stakes hold-and-release within ~300 ms | `aegis/gateway/budget.py`; see [Latency](#latency) — median overhead <!--m:lat_p50-->2.5<!--/m--> ms, <!--m:within_budget_frac-->51/53<!--/m--> within their own budget |
+| High-stakes hold-and-release within ~300 ms | `aegis/gateway/budget.py`; see [Latency](#latency) — median overhead <!--m:lat_p50-->2.3<!--/m--> ms, <!--m:within_budget_frac-->51/53<!--/m--> within their own budget |
 | Low-stakes streaming + async audit + retraction | `pipeline.run_streamed`, `pipeline.async_deep_pass`; scenario `sup_hallucination_stream_01` |
 | Post-generation evidence: verifier re-answers from same context | `aegis/evidence/performance.py` |
 | Token / retry / latency telemetry → Cost lane | `aegis/evidence/cost.py` |
@@ -583,6 +583,8 @@ ordinary hedged prose.
 | PII detection is regex + checksum, tuned for English/US-centric formats | an NER model and locale-specific detectors; the Luhn pattern generalises, the address pattern does not |
 | Corpus is 65 calibration rows; the models are correspondingly small | continuous learning from production feedback, which the loop already collects |
 | Cost baselines are per-process and in-memory; they reset on restart | shared baseline store (Redis), per-tenant segmentation, drift alarms |
+| **`client_id` defaults to `"anonymous"`**, so every caller that does not supply one shares a single retry/fan-out bucket. Measured: 15 distinct prompts from 15 notional clients drive `client_fanout` to its maximum of 1.0 — a shared bucket read as one abusive client. Only affects callers that omit the field; the seeded scenarios and background traffic all set it | derive the identity from an authenticated session rather than a client-supplied field, and refuse to score fan-out for unidentified callers |
+| **The Cost lane's EWMA absorbs a simultaneous burst.** Each request is scored against a baseline the rest of the burst is concurrently moving. Measured: five identical 400-token anomalies against a warm 100-token baseline score `[1.0, 0.124, 0.0, 0.0, 0.0]` — the first is caught and the rest are masked. The dominant effect is false *negatives* under concurrency, not false positives | score against a snapshot taken at window open, or use a windowed quantile rather than an EWMA that the traffic being judged is allowed to move |
 | **How much one override moves the model depends strongly on the lane.** Measured from a clean fit, a single override contradicting a maximally-confident detection moves the largest coefficient by **−0.34 (Performance), −2.67 (Responsibility), −3.77 (Cost)**; a weak override of a marginal flag moves it by ~0.03. Before the guards below, five overrides of one PII flag drove `pii_count` from +4.47 to −2.96 and turned a genuine SSN-plus-card RED into a YELLOW by the third | batched review with an approval quorum, per-operator trust weighting, and alerting when a coefficient's sign is about to flip |
 | The control endpoints have **no authentication**; `/v1/control/override` is rate-limited and guarded against contradicting checksum-grade detections, but anyone who can reach the port can still submit feedback under any operator name | operator identity and API keys, per-tenant policy binding, quotas |
 | Ledger checkpoint is stored next to the data it protects, so an operator with disk access who updates all three places (records, checkpoint table, sidecar file) is still undetected. Setting `AEGIS_LEDGER_KEY` adds an HMAC the checkpoint cannot be forged without | WORM storage or external anchoring — publish the head hash somewhere the operator does not control |

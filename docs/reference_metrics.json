@@ -67,9 +67,9 @@
       "sd": 69.75
     },
     "batch_analytics:aegis-mock-1:latency": {
-      "mean": 81.35,
+      "mean": 81.24,
       "n": 1,
-      "sd": 20.34
+      "sd": 20.31
     },
     "batch_analytics:aegis-mock-1:total": {
       "mean": 143395.0,
@@ -82,9 +82,9 @@
       "sd": 23.01
     },
     "clinical_intake:aegis-mock-1:latency": {
-      "mean": 56.15,
+      "mean": 56.07,
       "n": 6,
-      "sd": 12.0
+      "sd": 11.89
     },
     "clinical_intake:aegis-mock-1:total": {
       "mean": 377.46,
@@ -97,7 +97,7 @@
       "sd": 81.89
     },
     "default:aegis-mock-1:latency": {
-      "mean": 78.18,
+      "mean": 78.1,
       "n": 2,
       "sd": 20.36
     },
@@ -112,9 +112,9 @@
       "sd": 7.8
     },
     "fintech_advisor:aegis-mock-1:latency": {
-      "mean": 47.57,
+      "mean": 47.71,
       "n": 6,
-      "sd": 11.33
+      "sd": 11.37
     },
     "fintech_advisor:aegis-mock-1:total": {
       "mean": 396.01,
@@ -127,9 +127,9 @@
       "sd": 855.12
     },
     "support_copilot:aegis-mock-1:latency": {
-      "mean": 137.81,
+      "mean": 137.73,
       "n": 38,
-      "sd": 193.43
+      "sd": 193.11
     },
     "support_copilot:aegis-mock-1:total": {
       "mean": 662.08,
@@ -156,13 +156,13 @@
       "samples": 57
     },
     "cheap_signals": {
-      "admission_estimate_ms": 23.98,
-      "mean_ms": 11.96,
+      "admission_estimate_ms": 23.93,
+      "mean_ms": 11.97,
       "samples": 110
     },
     "context_prep": {
-      "admission_estimate_ms": 49.38,
-      "mean_ms": 24.1,
+      "admission_estimate_ms": 49.26,
+      "mean_ms": 23.88,
       "samples": 110
     },
     "cost_telemetry": {
@@ -171,23 +171,23 @@
       "samples": 110
     },
     "fusion": {
-      "admission_estimate_ms": 0.47,
-      "mean_ms": 0.26,
+      "admission_estimate_ms": 0.37,
+      "mean_ms": 0.23,
       "samples": 53
     },
     "responsibility_inline": {
-      "admission_estimate_ms": 0.89,
+      "admission_estimate_ms": 0.84,
       "mean_ms": 0.49,
       "samples": 110
     },
     "verifier": {
-      "admission_estimate_ms": 481.42,
-      "mean_ms": 311.08,
+      "admission_estimate_ms": 481.03,
+      "mean_ms": 311.27,
       "samples": 148
     },
     "verifier_params": {
-      "index_ms_per_sentence": 0.02968,
-      "scan_ms_per_sentence_claim": 0.000544
+      "index_ms_per_sentence": 0.02998,
+      "scan_ms_per_sentence_claim": 0.00055
     }
   },
   "counts": {
@@ -204,7 +204,7 @@
     "with_ground_truth": 21,
     "yellow": 2
   },
-  "generated_at": 1787599810.9818869,
+  "generated_at": 1787600416.504591,
   "labels": {
     "seeded_corpus": 65
   },
@@ -288,14 +288,14 @@
     "budget_exceeded": 2,
     "budget_exhausted": 2,
     "budget_exhausted_rate": 0.0377,
-    "inline_overhead_max_ms": 408.02,
-    "inline_overhead_p50_ms": 2.46,
-    "inline_overhead_p95_ms": 126.07,
-    "overhead_pct_of_budget_p95": 1.9,
+    "inline_overhead_max_ms": 407.59,
+    "inline_overhead_p50_ms": 2.32,
+    "inline_overhead_p95_ms": 125.15,
+    "overhead_pct_of_budget_p95": 1.8,
     "streamed_inline_overhead_ms": 0.0,
-    "total_p50_ms": 65.19,
-    "total_p95_ms": 402.1,
-    "upstream_p50_ms": 62.66,
+    "total_p50_ms": 65.05,
+    "total_p95_ms": 402.22,
+    "upstream_p50_ms": 62.58,
     "within_budget": 51,
     "within_budget_rate": 0.9623
   },
