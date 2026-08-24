@@ -116,6 +116,7 @@ class VerifierTrace:
     claims_total: int = 0
     claims_checked: int = 0
     context_sentences: int = 0
+    context_indexed: int = 0
     elapsed_ms: float = 0.0
     budget_exhausted: bool = False
     ran: bool = True
@@ -131,6 +132,7 @@ class VerifierTrace:
             "claims_total": self.claims_total,
             "claims_checked": self.claims_checked,
             "context_sentences": self.context_sentences,
+            "context_indexed": self.context_indexed,
             "elapsed_ms": round(self.elapsed_ms, 2),
             "budget_exhausted": self.budget_exhausted,
             "ran": self.ran,
@@ -204,6 +206,7 @@ class BudgetReport:
     exhausted: bool
     segments: list[dict[str, Any]] = field(default_factory=list)
     skipped: list[dict[str, Any]] = field(default_factory=list)
+    shortfalls: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -213,6 +216,7 @@ class BudgetReport:
             "exhausted": self.exhausted,
             "segments": self.segments,
             "skipped": self.skipped,
+            "shortfalls": self.shortfalls,
         }
 
 

@@ -35,6 +35,9 @@ class CostModel:
         self._dev: dict[str, float] = {}
         self._n: dict[str, int] = {}
         # Cold-start priors, in milliseconds. Replaced by observation quickly.
+        # Measured on the reference machine; refined by observation at runtime.
+        self._verifier_index_ms_per_sentence = 0.060
+        self._verifier_scan_ms_per_pair = 0.0011
         self._prior = {
             "cheap_signals": 3.0,
             "responsibility_inline": 5.0,
@@ -59,6 +62,37 @@ class CostModel:
             return self._mean[name] + 2.0 * self._dev[name]
         return self._prior.get(name, 25.0)
 
+    # -- parametric model for the verifier ---------------------------------- #
+    #
+    # A flat EWMA is wrong for the verifier: its cost is dominated by the size
+    # of the document, so an average learned on short factsheets under-prices a
+    # 5,000-clause contract by two orders of magnitude. We measured the shape --
+    #     cost ~= a * sentences + b * sentences * claims
+    # -- and learn the two constants instead of one mean.
+    def estimate_verifier(self, n_sentences: int, n_claims: int) -> float:
+        a = self._verifier_index_ms_per_sentence
+        b = self._verifier_scan_ms_per_pair
+        return 2.0 + a * n_sentences + b * n_sentences * max(1, n_claims)
+
+    def observe_verifier(self, ms: float, n_sentences: int, n_claims: int) -> None:
+        """Attribute observed cost back to the two constants."""
+        if n_sentences <= 0:
+            return
+        n_claims = max(1, n_claims)
+        predicted = self.estimate_verifier(n_sentences, n_claims)
+        if predicted <= 0:
+            return
+        ratio = max(0.2, min(5.0, ms / predicted))
+        self._verifier_index_ms_per_sentence *= (1 - self.alpha) + self.alpha * ratio
+        self._verifier_scan_ms_per_pair *= (1 - self.alpha) + self.alpha * ratio
+        self.observe("verifier", ms)
+
+    def verifier_params(self) -> dict[str, float]:
+        return {
+            "index_ms_per_sentence": round(self._verifier_index_ms_per_sentence, 5),
+            "scan_ms_per_sentence_claim": round(self._verifier_scan_ms_per_pair, 6),
+        }
+
     def snapshot(self) -> dict[str, dict[str, float]]:
         out: dict[str, dict[str, float]] = {}
         for name in set(self._mean) | set(self._prior):
@@ -81,6 +115,7 @@ class DeadlineBudget:
         self._start = time.perf_counter()
         self.segments: list[dict[str, Any]] = []
         self.skipped: list[dict[str, Any]] = []
+        self.shortfalls: list[dict[str, Any]] = []
         self.exhausted = False
 
     # -- clock ------------------------------------------------------------- #
@@ -103,13 +138,48 @@ class DeadlineBudget:
     def can_afford(self, name: str) -> bool:
         return self.remaining_ms() > self.costs.estimate(name)
 
-    def admit(self, name: str, required_ms: float | None = None) -> bool:
+    #: A preemptible check needs at least this much time to produce anything
+    #: worth having.
+    MIN_USEFUL_SLICE_MS = 20.0
+
+    def admit(self, name: str, required_ms: float | None = None,
+              preemptible: bool = False) -> bool:
+        """Decide whether a check may start.
+
+        A NON-preemptible check is all-or-nothing, so it is only admitted when
+        the whole estimate fits: starting one we cannot finish spends the
+        budget and returns nothing.
+
+        A PREEMPTIBLE check is admitted whenever it can make meaningful
+        progress, even if it certainly cannot finish. Partial evidence is worth
+        more than no evidence -- and, because the shortfall is recorded here, it
+        propagates into the uncertainty band rather than being mistaken for a
+        clean result.
+        """
         need = self.costs.estimate(name) if required_ms is None else required_ms
         left = self.remaining_ms()
+
+        if preemptible:
+            if left <= self.MIN_USEFUL_SLICE_MS:
+                self.skipped.append({
+                    "name": name, "needed_ms": round(need, 2),
+                    "remaining_ms": round(left, 2),
+                    "reason": f"below the {self.MIN_USEFUL_SLICE_MS:.0f}ms minimum useful slice",
+                })
+                self.exhausted = True
+                return False
+            if need > left:
+                self.shortfalls.append({
+                    "name": name, "needed_ms": round(need, 2),
+                    "remaining_ms": round(left, 2),
+                    "reason": "admitted with an expected shortfall — will be preempted "
+                              "and return partial evidence",
+                })
+            return True
+
         if left <= need:
             self.skipped.append({
-                "name": name,
-                "needed_ms": round(need, 2),
+                "name": name, "needed_ms": round(need, 2),
                 "remaining_ms": round(left, 2),
                 "reason": "insufficient budget at admission",
             })
@@ -149,4 +219,5 @@ class DeadlineBudget:
             exhausted=self.exhausted or spent > self.total_ms,
             segments=list(self.segments),
             skipped=list(self.skipped),
+            shortfalls=list(self.shortfalls),
         )

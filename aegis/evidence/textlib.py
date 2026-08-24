@@ -134,21 +134,39 @@ class IdfIndex:
     budget rather than a simulated delay pretending to.
     """
 
-    def __init__(self, sents: Iterable[str]):
+    def __init__(self, sents: Iterable[str], deadline=None):
         self.sents: list[str] = list(sents)
-        self.tokens: list[list[str]] = [content_tokens(s) for s in self.sents]
+        self.partial = False
+
+        # Building the index is itself expensive on a large document, so it is
+        # deadline-aware too. If the clock runs out mid-build we index the
+        # prefix we managed and report how far we got, rather than blowing the
+        # budget to produce a complete index nobody is still waiting for.
+        self.tokens: list[list[str]] = []
+        for i, s in enumerate(self.sents):
+            if deadline is not None and (i & 0x1F) == 0 and deadline():
+                self.partial = True
+                break
+            self.tokens.append(content_tokens(s))
+
         df: Counter[str] = Counter()
         for toks in self.tokens:
             df.update(set(toks))
-        n = max(1, len(self.sents))
+        n = max(1, len(self.tokens))
         self.idf: dict[str, float] = {t: math.log(1.0 + n / (1.0 + c)) for t, c in df.items()}
+
         self.vectors: list[dict[str, float]] = []
         self.norms: list[float] = []
-        for toks in self.tokens:
+        for i, toks in enumerate(self.tokens):
+            if deadline is not None and (i & 0x1F) == 0 and deadline():
+                self.partial = True
+                break
             tf = Counter(toks)
             vec = {t: (1.0 + math.log(c)) * self.idf.get(t, 0.0) for t, c in tf.items()}
             self.vectors.append(vec)
             self.norms.append(math.sqrt(sum(v * v for v in vec.values())) or 1.0)
+
+        self.indexed: int = len(self.vectors)
         self.vocab: set[str] = set(self.idf)
 
     def query_vector(self, text: str) -> tuple[dict[str, float], float]:

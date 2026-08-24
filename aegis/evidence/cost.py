@@ -18,7 +18,10 @@ from dataclasses import dataclass, field
 from ..types import Lane
 from .base import CheckInput, evidence
 
-MIN_SAMPLES = 5
+#: A z-score needs a baseline worth trusting. Five observations is not one --
+#: at n=5 the EWMA variance is still dominated by its own cold-start guess, and
+#: we measured that producing marginal false positives on ordinary traffic.
+MIN_SAMPLES = 8
 
 # Indicative per-1K-token prices, used for the cost-per-check figure on the
 # dashboard. Override per deployment; the ratio is what matters for the demo.
@@ -81,13 +84,36 @@ def estimated_cost_usd(usage: dict[str, int], verifier_tokens: int = 0) -> float
     return p + c + v
 
 
+#: Below this many sigma, a deviation is ordinary variation, not an anomaly.
+ANOMALY_DEADBAND_SIGMA = 2.0
+ANOMALY_SATURATION_SIGMA = 5.0
+
+
 def _squash(z: float) -> float:
-    """Map a z-score onto 0..1, saturating around 4 sigma."""
-    return max(0.0, min(1.0, z / 4.0))
+    """Map a z-score onto 0..1 with a deadband below 2 sigma.
+
+    The previous form was a bare `z / 4`, which gave an entirely ordinary
+    request -- z = 1.0, well inside normal variation -- a feature value of 0.25.
+    Against a Cost threshold of 0.04 that flagged 14 of 36 benign background
+    requests as token/latency anomalies. Anything under two sigma is now
+    exactly zero, and the signal ramps from there to saturation at five.
+    """
+    if z <= ANOMALY_DEADBAND_SIGMA:
+        return 0.0
+    span = ANOMALY_SATURATION_SIGMA - ANOMALY_DEADBAND_SIGMA
+    return max(0.0, min(1.0, (z - ANOMALY_DEADBAND_SIGMA) / span))
 
 
-def run_cost_check(inp: CheckInput, baselines: Baselines | None = None):
-    """Returns (EvidenceItem, features). Cheap enough to run on every request."""
+def run_cost_check(inp: CheckInput, baselines: Baselines | None = None,
+                   observe: bool = True):
+    """Returns (EvidenceItem, features). Cheap enough to run on every request.
+
+    `observe=False` scores against the baselines without folding this request
+    into them. The asynchronous deep pass re-checks a request that the inline
+    pass already recorded, and letting it observe again double-counts every
+    point -- which corrupts the variance and manufactures latency anomalies on
+    ordinary traffic. Each request must move the baseline exactly once.
+    """
     t0 = time.perf_counter()
     bl = baselines or BASELINES
     key = f"{inp.use_case}:{inp.model}"
@@ -107,9 +133,10 @@ def run_cost_check(inp: CheckInput, baselines: Baselines | None = None):
     z_latency = s_latency.z(latency)
 
     # Observe AFTER scoring, so a request is never judged against itself.
-    s_completion.observe(completion)
-    s_total.observe(total)
-    s_latency.observe(latency)
+    if observe:
+        s_completion.observe(completion)
+        s_total.observe(total)
+        s_latency.observe(latency)
 
     retry_burst = min(1.0, inp.retry_index / 4.0)
     fanout = min(1.0, max(0, inp.client_burst - 1) / 12.0)
@@ -125,12 +152,12 @@ def run_cost_check(inp: CheckInput, baselines: Baselines | None = None):
     }
 
     reasons: list[str] = []
-    if features["token_anomaly"] > 0.25:
+    if features["token_anomaly"] > 0.0:
         reasons.append(
             f"completion tokens {completion:.0f} is {z_completion:.1f}σ above the "
             f"{baseline_mean:.0f}-token baseline for {key}"
         )
-    if features["latency_anomaly"] > 0.25:
+    if features["latency_anomaly"] > 0.0:
         reasons.append(
             f"upstream latency {latency:.0f}ms is {z_latency:.1f}σ above the "
             f"{baseline_latency:.0f}ms baseline"

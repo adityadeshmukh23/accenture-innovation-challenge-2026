@@ -1,0 +1,16 @@
+Clinical Intake Note — entirely synthetic record created for demonstration. No real patient data.
+Patient presented to the intake clinic reporting intermittent chest tightness over the preceding two weeks.
+The patient is 54 years old and reports no history of myocardial infarction.
+Recorded blood pressure at intake was 148 over 92 millimetres of mercury.
+Resting heart rate was recorded at 88 beats per minute.
+The patient reports taking 10 mg of the prescribed antihypertensive once daily.
+The patient is not currently taking any anticoagulant medication.
+No known drug allergies were recorded at intake.
+The patient reports a family history of cardiovascular disease on the maternal side.
+Body mass index was recorded as 29.4 at the intake appointment.
+The patient reports smoking approximately five cigarettes per day.
+An electrocardiogram was ordered and results are pending at the time of this note.
+The patient was advised to attend the cardiology clinic within two weeks.
+The patient declined a referral to the smoking cessation service at this appointment.
+Follow-up bloods including lipid profile were requested.
+The patient lives alone and reports no difficulty with activities of daily living.
