@@ -537,21 +537,42 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 
 ## Limitations and what production would add
 
-**Negation and hedging are shallow.** The polarity axis is a **parity count over explicit negation
-cues**. It reliably catches a single clear flip — *"is eligible"* versus *"is not eligible"* — and
-`test_negation_flip_is_detected` covers exactly that. It does **not** handle:
+**Negation and hedging are shallow, in a specific and measurable way.** The polarity axis is a
+**parity count over an explicit negation-cue set**. Every claim below was measured against the live
+verifier (`tests/test_negation_limits.py` pins all of them), because a limitations section that
+guesses is no more useful than one that boasts.
 
-- **double negatives** — *"it is not true that the fund is ineligible"* has even parity and reads as
-  agreement;
-- **litotes** — *"not unlikely"*, *"not without risk"* are scored as negations when they are hedged
-  affirmatives;
-- **scope ambiguity** — in *"the fund does not guarantee returns or principal"*, the negation covers
-  both objects, but parity cannot tell which clause a claim is disputing;
-- **contrastive constructions** — *"eligible, but only after the lock-up"* is a qualified yes that
-  parity reads as a plain yes.
+*What it does catch* — a claim whose negation parity differs from its evidence:
+
+| Construction | Example | Result |
+|---|---|---|
+| plain flip | *"is eligible"* vs context *"is not eligible"* | **caught**, p=0.76 |
+| double negative | *"it is not true that the fund is ineligible"* | **caught**, p=0.84 |
+| double negative | *"the fund is not ineligible"* | **caught**, p=0.81 |
+| litotes, both terms in the cue set | *"not without eligibility"* | **caught**, p=0.84 |
+| added false qualifier | *"eligible, but only after the lock-up"* (context: not eligible) | **caught**, p=0.89 |
+
+*What it misses* — the parity heuristic's real boundary is that it only sees words in its cue set,
+and only compares whole-sentence parity:
+
+| Construction | Example | Result |
+|---|---|---|
+| litotes where the negated term is not a cue | *"not unlikely to qualify"*, *"not impossible"*, *"hardly ineligible"* | **missed**, p≈0.04 |
+| negation scoped over two objects, split in the response | context *"does not guarantee returns or principal"* → *"does guarantee returns, though not principal"* | **missed**, p≈0.03 |
+| a qualifier present in the context and **dropped** by the response | context *"eligible only after a twelve-month lock-up"* → *"the fund is eligible"* | **missed**, p=0.02 |
+
+The dropped-qualifier case is the one that should worry you most: the response is not negated at all,
+so parity has nothing to compare, and every other axis sees a well-grounded sentence. It is a
+genuine, reproducible false negative.
+
+Note that **an earlier revision of this section claimed double negatives and litotes were blanket
+weaknesses. Testing showed both are caught** in the common forms, so those claims were wrong and are
+corrected above. Claiming a weakness you do not have is the same accuracy failure as hiding one.
 
 This lane is a cheap, transparent first pass, not entailment. Production would put a small NLI model
 behind the same `ClaimTrace` interface — the trace structure and dashboard already accommodate it.
+Widening the cue set is *not* the fix: it would convert these false negatives into false positives on
+ordinary hedged prose.
 
 **Other honest limits:**
 
