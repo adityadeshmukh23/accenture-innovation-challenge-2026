@@ -280,6 +280,39 @@ scenarios:
       silently passing. The availability target (99.9% vs 99.5%) and notice
       period (30 vs 90 days) are both genuinely wrong.
 
+  - id: budget_miss_open_01
+    title: "Same budget miss at LOW stakes — fails OPEN instead"
+    use_case: default
+    context: msa
+    signals: {transaction_value: 40, data_sensitivity: public}
+    stream: false
+    question: "What is the availability target and the termination notice period?"
+    mock:
+      answer: "The monthly availability target is 99.9% measured over each calendar month. Either party may terminate for convenience on 30 days written notice. The Supplier must retain the incident log for a period of 24 months. Subprocessing requires prior written approval from the Customer. The escrow materials are verified annually by an independent agent. Service credits accrue at 5% of the monthly charge per missed target. Business continuity plans are tested twice per calendar year. The Customer may audit the Supplier once in any twelve month period."
+    ground_truth: {performance: 1, cost: 0, responsibility: 0, expected_decision: RED}
+    demo: budget_miss_open
+    note: >
+      The exact counterpart to budget_miss_01: SAME policy, SAME document, SAME
+      budget overrun. The only difference is the request signals -- $40 and
+      public data instead of $5,000 and internal -- which the default policy
+      downgrades to T0.
+
+      The client did not ask to stream, so the response is held and the verifier
+      does start; it is then preempted by the 300ms deadline exactly as in
+      budget_miss_01. But the widened uncertainty band now falls the OTHER way.
+      T0 fails OPEN: the response is delivered un-audited and flagged
+      asynchronously, instead of being escalated.
+
+      Together the two scenarios are the whole point of the tier. Budget
+      exhaustion always has a defined consequence, and which consequence you get
+      depends on what a mistake would cost -- not on chance.
+
+      expected_decision is RED because that is what THIS policy's declared
+      lambda implies: default sets Performance lambda=5, so t_red=0.300, and the
+      completed async pass scores well above it. The inline outcome is GREEN --
+      delivered un-audited -- and that gap between inline and final is the
+      measured price of failing open, not an error.
+
   - id: batch_deep_01
     title: "Same document, no latency ceiling — verification completes"
     use_case: batch_analytics

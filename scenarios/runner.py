@@ -11,6 +11,7 @@ import asyncio
 import json
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import httpx
@@ -18,6 +19,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SEEDS = ROOT / "scenarios" / "seeds.yaml"
+
+#: A fresh client identity per replay. Without it, a second `make scenarios`
+#: against the same gateway is -- correctly -- seen as a retry storm: the Cost
+#: lane fingerprints prompts, and replaying identical ones is exactly what it
+#: exists to catch. Each run is a distinct session, so it gets a distinct id.
+RUN_ID = uuid.uuid4().hex[:8]
 
 GREEN, YELLOW, RED, RESET, BOLD, DIM = (
     "\033[32m", "\033[33m", "\033[31m", "\033[0m", "\033[1m", "\033[2m")
@@ -42,7 +49,7 @@ def build_body(seeds: dict, sc: dict) -> dict:
         "context": context_for(seeds, sc.get("context", "")),
         "scenario_id": sc["id"],
         "ground_truth": sc.get("ground_truth", {}),
-        "client_id": f"scenario:{sc['use_case']}",
+        "client_id": f"scenario:{sc['use_case']}:{RUN_ID}",
         **(sc.get("signals") or {}),
     }
     if sc.get("mock"):
@@ -110,7 +117,7 @@ async def send_background(client: httpx.AsyncClient, base: str, seeds: dict, n: 
                 # above the auto-approval limit, so these are HELD (T1) and the
                 # gate actually gets a decision to make
                 "transaction_value": 2500, "data_sensitivity": "public",
-                "client_id": f"background-{i % 7}",
+                "client_id": f"background-{RUN_ID}-{i % 7}",
             },
         }
         await client.post(f"{base}/v1/chat/completions", json=body, timeout=30.0)

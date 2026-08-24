@@ -10,7 +10,7 @@ make demo
 ```
 
 That is the whole quickstart. It builds a virtualenv from pinned dependencies, fits the calibrated
-lane models from the labelled corpus, starts the gateway, replays 20 labelled scenarios plus 36
+lane models from the labelled corpus, starts the gateway, replays 21 labelled scenarios plus 36
 benign background requests, verifies the audit ledger with a standalone tool, and leaves the
 dashboard at <http://127.0.0.1:8000>. It runs entirely offline — no API key, no network, no Docker.
 
@@ -131,9 +131,14 @@ because starting what you cannot finish spends the budget and returns nothing.
 
 **2 · Budget exhaustion is never silent.** Missing evidence becomes *uncertainty band width*, and
 the tier decides which way the band falls: **T0 fails open** (deliver, audit async, retract if
-wrong), **T1/T2 fail closed** (escalate). Watch `budget_miss_01` in the demo: the verifier gets
-preempted mid-document, the band widens to ±0.35, and a T1 request escalates to RED on the strength
-of *not having been able to check* — which is the correct behaviour, not a bug.
+wrong), **T1/T2 fail closed** (escalate).
+
+`budget_miss_01` and `budget_miss_open_01` are the same policy, the same 5,000-clause document and
+the same budget overrun — differing only in the request signals, which put one at T1 and the other
+at T0. Both start the verifier and both blow the 300 ms deadline at 0 claims checked. The T1 request
+escalates to **RED** on the strength of *not having been able to check*; the T0 request is
+**delivered un-audited** and flagged asynchronously. Budget exhaustion always has a defined
+consequence, and which one you get depends on what a mistake would cost.
 
 **3 · Adaptive scrutiny.** Cheap deterministic signals run on 100% of traffic at ~2 ms and gate the
 ~100 ms verifier. In the reference run the verifier runs inline on **31% of held requests overall —
@@ -357,9 +362,9 @@ dashboard cannot drift from the records that justify it. Reference run (`make de
 
 | Lane | TP | FP | FN | TN | Precision | Recall | F1 | FPR | FNR |
 |---|---|---|---|---|---|---|---|---|---|
-| performance | 10 | 1 | 0 | 9 | 0.909 | 1.000 | 0.952 | 0.100 | 0.000 |
-| cost | 1 | 0 | 0 | 19 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |
-| responsibility | 6 | 0 | 0 | 14 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |
+| performance | 11 | 1 | 0 | 9 | 0.917 | 1.000 | 0.957 | 0.100 | 0.000 |
+| cost | 1 | 0 | 0 | 20 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |
+| responsibility | 6 | 0 | 0 | 15 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |
 
 **The single Performance false positive is `fin_overflag_01`, and it is deliberate.** It is a
 substantively *correct* answer ("a shade over four percent after charges") expressed in words rather
@@ -371,8 +376,8 @@ non-zero and honest, and so the λ slider has something real to trade against. A
 
 | View | Decision accuracy | Performance recall |
 |---|---|---|
-| **Inline** (what the user received at request time) | 85% (17/20) | 0.800 |
-| **Final** (after the async deep pass) | 95% (19/20) | 1.000 |
+| **Inline** (what the user received at request time) | 81.0% (17/21) | 0.727 |
+| **Final** (after the async deep pass) | 95.2% (20/21) | 1.000 |
 
 Reporting only one of these would mislead in opposite directions: inline alone ignores every
 retraction the system actually made, final alone takes credit for catches the user never saw in
@@ -382,25 +387,30 @@ time. The gap *is* the cost of streaming, stated numerically.
 
 | Figure | Value |
 |---|---|
-| Inline overhead p50 / p95 | **2.4 ms / 6.0 ms** |
+| Inline overhead p50 | **2.7 ms** |
 | Inline overhead, streamed requests | **0.0 ms** |
-| Within their own policy budget | **51/52 (98%)** |
-| p95 overhead as % of its own budget | **2%** |
-| Budget exhausted | 1/52 (the seeded `budget_miss_01`) |
+| Within their own policy budget | **51/53 (96%)** |
+| p95 overhead as % of its own budget | **1.3%** |
+| Budget exhausted | 2/53 — the two seeded budget-miss scenarios |
+| Inline overhead p95 (raw ms) | 123.7 ms |
 
-Overhead is compared against *each request's own* budget: mixing a 300 ms interactive budget with a
-30 s batch budget into one percentile would flatter both.
+Two notes on reading these honestly. Overhead is compared against *each request's own* budget —
+mixing a 300 ms interactive budget with a 30 s batch budget into one percentile would flatter both,
+which is why **p95 as a share of its own budget (1.3%)** is the meaningful figure. And the raw p95 of
+123.7 ms is not representative of ordinary traffic: two of 53 held requests are *deliberately*
+pathological 5,000-clause budget-miss scenarios, and at n=53 the 95th percentile lands on one of
+them. The median, 2.7 ms, is what normal traffic costs.
 
 ### Adaptive scrutiny
 
-Verifier ran inline on **16/52 held requests (31%)** — 100% on high-stakes policies, **5% on
+Verifier ran inline on **17/53 held requests (32%)** — 100% on high-stakes policies, **5% on
 low-stakes support traffic** — while still reaching 1.000 final recall on Performance. That ratio is
 the headline efficiency number: it is what makes a 300 ms budget survivable at scale.
 
 ### Cost and calibration
 
-Estimated **$0.00164 per request**, with the verifier accounting for 94.8% of tokens — which is
-precisely why gating it matters. Calibration: **Brier 0.071, ECE 0.094** over 60 lane-decisions.
+Estimated **$0.00237 per request**, with the verifier accounting for 96.4% of tokens — which is
+precisely why gating it matters. Calibration: **Brier 0.073, ECE 0.100** over 63 lane-decisions.
 Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 
 > **Reproducibility note.** With `AEGIS_SEED=1337` the decision path is deterministic, with one
@@ -431,7 +441,7 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 | ≥3 use cases with different risk/latency profiles | 4 use cases — see [Use cases](#use-cases) |
 | Feedback loop: flags become checker-training data | `aegis/feedback/store.py`, `aegis/feedback/trainer.py`; `/v1/control/override` → `/v1/control/retrain` |
 | Metrics: FP/FN, precision/recall per lane, latency, cost | `aegis/telemetry/metrics.py`, dashboard Metrics tab |
-| Seeded labelled scenario set | `scenarios/seeds.yaml` — 20 evaluation + 65 calibration rows, **disjoint** |
+| Seeded labelled scenario set | `scenarios/seeds.yaml` — 21 evaluation + 65 calibration rows, **disjoint** |
 | ≥1 hallucination | `fin_hallucination_01` |
 | ≥1 cost anomaly | `sup_cost_storm_01` |
 | ≥1 PII / bias | `clin_pii_01`, `sup_pii_01`, `clin_bias_01` |
@@ -439,7 +449,7 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 | ≥1 intentional over-flag for FP/FN tuning | `fin_overflag_01` |
 | Visible reasoning trace on the dashboard | dashboard → Live decisions → any row |
 | Budget readout shown live | dashboard → Latency budget panel (`317ms / 300ms`) |
-| Scenario where the verifier misses the budget | `budget_miss_01`, paired with `batch_deep_01` on the same document |
+| Scenario where the verifier misses the budget | `budget_miss_01` (T1, fails **closed** → escalates) and `budget_miss_open_01` (T0, fails **open** → delivered un-audited + async flag). Same policy, same document, opposite fallback. `batch_deep_01` completes the same verification with no latency ceiling |
 | Standalone ledger integrity verifier | `aegis/tools/verify_ledger.py`, `make verify-ledger` / `make tamper-demo` |
 | Reproducible from a clean clone, one command | `make demo`, fixed seed, pinned dependencies |
 

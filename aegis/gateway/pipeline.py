@@ -299,7 +299,11 @@ async def run_pipeline(body: dict[str, Any], headers: dict[str, str] | None = No
                             backend_resp.latency_ms, backend_resp.model,
                             backend_resp.finish_reason)
 
-    streamed = prior.stream_allowed if stream_override is None else stream_override
+    # This is the NON-streaming path: whatever the policy would have permitted,
+    # nothing was streamed here, so the record must not claim it was. Marking a
+    # held request as streamed made the inline metrics score it as "nothing was
+    # checked before release" when the inline checks had in fact run.
+    streamed = False if stream_override is None else stream_override
     budget = DeadlineBudget(prior.hold_budget_ms, COSTS, label="inline")
 
     ev = gather_evidence(inp, policy, prior.tier, budget)
