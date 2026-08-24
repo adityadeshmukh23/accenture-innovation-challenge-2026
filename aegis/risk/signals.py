@@ -58,6 +58,12 @@ class RetryTracker:
         cutoff = now - self.window
         return sum(1 for ts, c, f in self._events if ts >= cutoff and c == client_id and f == fingerprint)
 
+    def seen(self, client_id: str, fingerprint: str) -> int:
+        """Read-only count of this prompt in the window. Does not record."""
+        cutoff = time.time() - self.window
+        return sum(1 for ts, c, f in self._events
+                   if ts >= cutoff and c == client_id and f == fingerprint)
+
     def burst_for(self, client_id: str) -> int:
         """Total requests from this client inside the window (fan-out signal)."""
         cutoff = time.time() - self.window
@@ -69,8 +75,17 @@ RETRIES = RetryTracker()
 _SENSITIVITY_ORDER = {"public": 0, "internal": 1, "financial": 2, "pii": 3, "phi": 4}
 
 
-def extract_signals(body: dict[str, Any], headers: dict[str, str] | None = None) -> RequestSignals:
-    """Build RequestSignals from the `aegis` body extension and/or x-aegis-* headers."""
+def extract_signals(body: dict[str, Any], headers: dict[str, str] | None = None,
+                    observe: bool = True) -> RequestSignals:
+    """Build RequestSignals from the `aegis` body extension and/or x-aegis-* headers.
+
+    `observe=False` reads the signals WITHOUT recording the request in the retry
+    tracker. The streaming path needs the stakes tier before it decides whether
+    it may stream at all, and that pre-flight read must not count as a second
+    sighting of the same prompt -- doing so would inflate retry_index and
+    manufacture Cost-lane anomalies, the same double-counting class of bug as
+    the async deep pass re-observing telemetry baselines.
+    """
     headers = {k.lower(): v for k, v in (headers or {}).items()}
     ext = body.get("aegis") or {}
 
@@ -88,7 +103,7 @@ def extract_signals(body: dict[str, Any], headers: dict[str, str] | None = None)
 
     client_id = str(pick("client_id", headers.get("x-aegis-client-id", "anonymous")))
     fp = prompt_fingerprint(messages)
-    observed_retries = RETRIES.observe(client_id, fp)
+    observed_retries = RETRIES.observe(client_id, fp) if observe else RETRIES.seen(client_id, fp)
     declared_retries = int(pick("retry_index", 0) or 0)
 
     return RequestSignals(

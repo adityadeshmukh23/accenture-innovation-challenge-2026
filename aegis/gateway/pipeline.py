@@ -406,6 +406,13 @@ async def async_deep_pass(decision: AegisDecision, inp: CheckInput, policy: Poli
 # --------------------------------------------------------------------------- #
 # Streaming path: release first, audit after, retract if the audit disagrees
 # --------------------------------------------------------------------------- #
+def _chunks(text: str, words_per_chunk: int = 6):
+    words_out = (text or "").split(" ")
+    for i in range(0, len(words_out), words_per_chunk):
+        yield " ".join(words_out[i:i + words_per_chunk]) + " "
+
+
+
 async def run_streamed(body: dict[str, Any], headers: dict[str, str] | None = None):
     """Async generator yielding (chunk_text, done, decision).
 
@@ -414,6 +421,28 @@ async def run_streamed(body: dict[str, Any], headers: dict[str, str] | None = No
     remedy is retraction rather than prevention. That is the honest trade: we
     buy latency with the ability to be wrong in public for a few seconds.
     """
+    # ---- POLICY GATE ON STREAMING ------------------------------------------
+    # Checked BEFORE the upstream is called, and before a single byte is
+    # yielded. `stream: true` is a client *request*, not permission: whether a
+    # response may be released before it has been audited is the policy's
+    # decision, and clinical_intake / the EU overlay both declare
+    # `stream_tiers: []`. Without this gate the streaming path yielded PHI
+    # verbatim with a GREEN verdict while the identical non-streaming request
+    # returned RED -- the transport chose the safety posture.
+    #
+    # The pre-flight read must not disturb the retry tracker, hence observe=False.
+    pre_sig = extract_signals(body, headers, observe=False)
+    pre_policy = POLICIES.resolve(pre_sig.use_case, pre_sig.geo)
+    pre_prior = compute_prior(pre_sig, pre_policy)
+    if not pre_prior.stream_allowed:
+        decision = await run_pipeline(body, headers, stream_override=False)
+        # The client asked for SSE, so it gets SSE -- but of the audited text,
+        # after the hold-and-release decision, never of the raw draft.
+        for chunk in _chunks(decision.delivered_text):
+            yield (chunk, False, None)
+        yield ("", True, decision)
+        return
+
     request_id = new_id("req")
     t_start = time.perf_counter()
 
@@ -434,9 +463,8 @@ async def run_streamed(body: dict[str, Any], headers: dict[str, str] | None = No
 
     release_ms = (time.perf_counter() - t_start) * 1000.0
 
-    words_out = backend_resp.text.split(" ")
-    for i in range(0, len(words_out), 6):
-        yield (" ".join(words_out[i:i + 6]) + " ", False, None)
+    for chunk in _chunks(backend_resp.text):
+        yield (chunk, False, None)
         await asyncio.sleep(0.004)
 
     decision = AegisDecision(
