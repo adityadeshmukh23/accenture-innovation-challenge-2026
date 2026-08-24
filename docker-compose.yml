@@ -1,0 +1,36 @@
+# Secondary path only — UNTESTED (no Docker on the development machine).
+# The supported, verified entry point is:  make demo
+#
+#   docker compose up --build          # gateway + dashboard on :8000
+#   docker compose run --rm scenarios  # replay the seeded set against it
+services:
+  aegis:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      AEGIS_BACKEND: mock
+      AEGIS_SEED: "1337"
+      AEGIS_DATA_DIR: /app/data
+    volumes:
+      - aegis-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  scenarios:
+    build: .
+    depends_on:
+      aegis:
+        condition: service_healthy
+    environment:
+      AEGIS_DATA_DIR: /app/data
+    volumes:
+      - aegis-data:/app/data
+    command: ["python", "-m", "scenarios.runner", "--base-url", "http://aegis:8000"]
+
+volumes:
+  aegis-data:
