@@ -18,6 +18,7 @@ from ..feedback.store import LABELS
 from ..feedback import trainer
 from ..telemetry import events
 from ..types import Lane
+from .guard import LIMITER, protected_hits
 
 router = APIRouter(prefix="/v1/control")
 
@@ -92,6 +93,18 @@ async def override(req: OverrideRequest) -> dict[str, Any]:
     fired = [ln for ln, lr in lanes_src.items() if lr.get("decision") in ("YELLOW", "RED")]
     targets = [req.lane] if req.lane else (fired or [Lane.PERFORMANCE.value])
 
+    allowed, why = LIMITER.check(req.operator)
+    if not allowed:
+        raise HTTPException(429, why)
+
+    # An override always changes this response's outcome and is always audited.
+    # Whether it also becomes TRAINING DATA depends on what it contradicts:
+    # a checksum-validated identifier is a fact about the text, not a
+    # statistical opinion one click should be able to unteach. Measured before
+    # this guard: five overrides moved pii_count from +4.47 to -2.96 and turned
+    # a genuine SSN-plus-card RED into a YELLOW by the third.
+    protected = protected_hits(lane_features)
+
     if req.verdict == "confirm":
         labels = {ln: (1 if ln in targets else 0) for ln in lane_features}
         source = "human_confirm"
@@ -101,20 +114,36 @@ async def override(req: OverrideRequest) -> dict[str, Any]:
     else:
         raise HTTPException(400, "verdict must be 'confirm' or 'override'")
 
+    training_excluded = bool(protected) and req.verdict == "override"
+    exclusion_reason = ""
+    if training_excluded:
+        exclusion_reason = ("override honoured and audited, but withheld from training: it "
+                            "contradicts " + "; ".join(h["reason"] for h in protected))
+
+    LIMITER.record(req.operator)
     row = LABELS.add(request_id=req.request_id, source=source,
                      use_case=payload.get("use_case", "default"),
                      lane_features=lane_features, labels=labels,
-                     note=req.note, operator=req.operator)
+                     note=req.note, operator=req.operator,
+                     training_excluded=training_excluded,
+                     exclusion_reason=exclusion_reason)
 
     ledger_entry = LEDGER.append_feedback({
         "request_id": req.request_id, "verdict": req.verdict, "lanes": targets,
         "labels": labels, "note": req.note, "operator": req.operator,
         "original_decision": payload.get("decision"),
         "ground_truth": payload.get("ground_truth", {}),
+        "protected_detections": protected,
+        "training_excluded": training_excluded,
+        "exclusion_reason": exclusion_reason,
     })
     events.publish("human_feedback", {**row, "ledger": ledger_entry})
     return {"ok": True, "recorded": row, "ledger": ledger_entry,
-            "label_counts": LABELS.counts()}
+            "label_counts": LABELS.counts(),
+            "protected_detections": protected,
+            "training_excluded": training_excluded,
+            "exclusion_reason": exclusion_reason,
+            "rate_limit": LIMITER.snapshot()}
 
 
 @router.post("/retrain")

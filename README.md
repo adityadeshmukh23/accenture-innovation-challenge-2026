@@ -200,6 +200,26 @@ evidence; it is not an argument for acting on *no* evidence. (This was a real bu
 summary with every feature at zero scored 0.0285 against a 0.023 threshold and was being auto-edited
 on the strength of nothing.)
 
+**The feedback endpoint is a poisoning surface, and is guarded as one.** A loop that turns human
+clicks into training data is an attack surface by construction. Two guards, addressing two different
+things:
+
+* **Rate limit** — a sliding window per operator and globally (`AEGIS_OVERRIDE_LIMIT`, default 10 per
+  10 minutes). Blunt, and the reason the endpoint is no longer unbounded.
+* **Protected detections** — some findings are not statistical opinions. A card number that passes a
+  Luhn checksum, a US SSN pattern, an explicit dosage instruction, a regulatory guarantee phrase:
+  these are facts about the text. An override contradicting one is **honoured and audited** — it
+  still changes that response's outcome, because a human's judgement is not overruled by the
+  machine — but it is **withheld from training**, with the reason recorded in the ledger.
+
+That boundary is the design: *operators keep authority over releases; the detectors keep authority
+over arithmetic.* Verified live — eight sequential overrides of an SSN-plus-card RED now leave
+`pii_severity` and `pii_count` bit-identical and the decision still RED, while a legitimate override
+of the `fin_overflag_01` false positive still trains normally.
+
+The endpoint remains **unauthenticated** in this build. That is a demo affordance, not a design
+position; production needs operator identity before any of this is load-bearing.
+
 **Calibration is measured, not assumed.** The derived thresholds are only meaningful if `p` is a
 real probability, so the fit reports Brier and ECE, and **class balancing is deliberately off** —
 inverse-frequency weights improve recall by dragging the learned base rate toward 0.5, which
@@ -542,8 +562,8 @@ behind the same `ClaimTrace` interface — the trace structure and dashboard alr
 | PII detection is regex + checksum, tuned for English/US-centric formats | an NER model and locale-specific detectors; the Luhn pattern generalises, the address pattern does not |
 | Corpus is 65 calibration rows; the models are correspondingly small | continuous learning from production feedback, which the loop already collects |
 | Cost baselines are per-process and in-memory; they reset on restart | shared baseline store (Redis), per-tenant segmentation, drift alarms |
-| One override moves a weight ~0.03 and will not flip a decision alone | this is correct behaviour, but production would batch reviews and show operators when a threshold is about to move |
-| No authentication, rate limiting or multi-tenancy | API keys, per-tenant policy binding, quotas |
+| **How much one override moves the model depends strongly on the lane.** Measured from a clean fit, a single override contradicting a maximally-confident detection moves the largest coefficient by **−0.34 (Performance), −2.67 (Responsibility), −3.77 (Cost)**; a weak override of a marginal flag moves it by ~0.03. Before the guards below, five overrides of one PII flag drove `pii_count` from +4.47 to −2.96 and turned a genuine SSN-plus-card RED into a YELLOW by the third | batched review with an approval quorum, per-operator trust weighting, and alerting when a coefficient's sign is about to flip |
+| The control endpoints have **no authentication**; `/v1/control/override` is rate-limited and guarded against contradicting checksum-grade detections, but anyone who can reach the port can still submit feedback under any operator name | operator identity and API keys, per-tenant policy binding, quotas |
 | Ledger checkpoint is stored next to the data it protects, so an operator with disk access who updates all three places (records, checkpoint table, sidecar file) is still undetected. Setting `AEGIS_LEDGER_KEY` adds an HMAC the checkpoint cannot be forged without | WORM storage or external anchoring — publish the head hash somewhere the operator does not control |
 | `docker-compose.yml` ships but is **untested** — Docker was unavailable on the development machine | verified container build in CI; `make demo` is the supported path today |
 | Async deep pass runs on every response, doubling verifier compute | sampled for high-volume tiers; the policy field to control it already exists |

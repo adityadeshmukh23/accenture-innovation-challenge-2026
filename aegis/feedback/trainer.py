@@ -212,9 +212,11 @@ def fit_from_corpus() -> dict[str, Any]:
 def retrain_with_feedback() -> dict[str, Any]:
     """Refit on the calibration corpus PLUS every human verdict recorded since."""
     corpus = build_dataset(persist=False)
-    human = LABELS.rows(sources=["human_override", "human_confirm"])
+    human = LABELS.trainable(sources=["human_override", "human_confirm"])
+    excluded = len(LABELS.rows(sources=["human_override", "human_confirm"])) - len(human)
     report = fit_all(corpus + human)
     report["human_rows"] = len(human)
+    report["human_rows_excluded"] = excluded
     report["corpus_rows"] = len(corpus)
     report["metrics"] = {
         l: report["lanes"].get(l, {}).get("brier") for l in [x.value for x in Lane]

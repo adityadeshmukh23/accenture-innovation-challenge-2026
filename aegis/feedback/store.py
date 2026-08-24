@@ -24,7 +24,8 @@ class LabelStore:
 
     def add(self, *, request_id: str, source: str, use_case: str,
             lane_features: dict[str, dict[str, float]], labels: dict[str, int],
-            note: str = "", operator: str = "") -> dict[str, Any]:
+            note: str = "", operator: str = "", training_excluded: bool = False,
+            exclusion_reason: str = "") -> dict[str, Any]:
         row = {
             "ts": time.time(),
             "request_id": request_id,
@@ -34,6 +35,10 @@ class LabelStore:
             "labels": labels,           # {lane: 0|1}
             "note": note,
             "operator": operator,
+            # Recorded and auditable either way; only fed to the fit when the
+            # flag it contradicts was an inference rather than a checksum.
+            "training_excluded": training_excluded,
+            "exclusion_reason": exclusion_reason,
         }
         with self.path.open("a") as fh:
             fh.write(json.dumps(row) + "\n")
@@ -54,6 +59,10 @@ class LabelStore:
             if sources is None or r.get("source") in sources:
                 out.append(r)
         return out
+
+    def trainable(self, sources: Iterable[str] | None = None) -> list[dict[str, Any]]:
+        """Rows the model may learn from — excludes guarded overrides."""
+        return [r for r in self.rows(sources) if not r.get("training_excluded")]
 
     def counts(self) -> dict[str, int]:
         c: dict[str, int] = {}
