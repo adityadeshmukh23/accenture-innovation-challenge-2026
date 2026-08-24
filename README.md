@@ -16,8 +16,21 @@ dashboard at <http://127.0.0.1:8000>. It runs entirely offline — no API key, n
 
 ---
 
+## Submission links
+
+| | |
+|---|---|
+| **Demo video (2–3 min)** | ⚠️ **NOT YET RECORDED — replace this line with the hosted link before submitting.** Shot-by-shot script and storyboard: [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) |
+| **Public repository** | <https://github.com/adityadeshmukh23/accenture-innovation-challenge-2026> |
+
+The video walks the seeded RED case being flagged, held and rerouted live on the dashboard, the
+300 ms budget being enforced and missed, the metrics view, and the ledger tamper proof.
+
+---
+
 ## Contents
 
+- [Submission links](#submission-links)
 - [What problem this solves](#what-problem-this-solves)
 - [Architecture](#architecture)
 - [The two tradeoffs everything else follows from](#the-two-tradeoffs-everything-else-follows-from)
