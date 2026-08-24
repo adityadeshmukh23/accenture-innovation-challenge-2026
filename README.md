@@ -129,16 +129,36 @@ them, priced by a *parametric* cost model — the verifier's cost is dominated b
 certainly cannot finish, because partial evidence beats no evidence; a non-preemptible one is not,
 because starting what you cannot finish spends the budget and returns nothing.
 
-**2 · Budget exhaustion is never silent.** Missing evidence becomes *uncertainty band width*, and
-the tier decides which way the band falls: **T0 fails open** (deliver, audit async, retract if
-wrong), **T1/T2 fail closed** (escalate).
+**2 · Missing evidence is never silent — and it has exactly one meaning.**
 
-`budget_miss_01` and `budget_miss_open_01` are the same policy, the same 5,000-clause document and
-the same budget overrun — differing only in the request signals, which put one at T1 and the other
-at T0. Both start the verifier and both blow the 300 ms deadline at 0 claims checked. The T1 request
-escalates to **RED** on the strength of *not having been able to check*; the T0 request is
-**delivered un-audited** and flagged asynchronously. Budget exhaustion always has a defined
-consequence, and which one you get depends on what a mistake would cost.
+Two different things stop the Performance lane from checking a response:
+
+> **If the verifier ran out of budget, it couldn't check. If no context was supplied, it also
+> couldn't check. Both produce missing evidence; the tier decides which way the uncertainty band
+> falls.**
+
+Both leave every Performance feature at zero, and a lane whose features are all zero reports its
+base rate — which is *not* a low-risk finding, it is an absence of any finding. So both widen the
+uncertainty band in proportion to what was not learned, and then the tier decides direction:
+**T0 fails open** (deliver, audit async, retract if wrong), **T1/T2 fail closed** (escalate).
+
+*Cause one — the budget.* `budget_miss_01` and `budget_miss_open_01` are the same policy, the same
+5,000-clause document and the same overrun, differing only in the request signals, which put one at
+T1 and the other at T0. Both start the verifier and both blow the 300 ms deadline at 0 claims
+checked. The T1 request escalates to **RED** on the strength of *not having been able to check*; the
+T0 request is **delivered un-audited** and flagged asynchronously.
+
+*Cause two — no grounding context.* A request with no documents attached is not a verified request,
+it is an **unverifiable** one. A $500,000 fintech question with an empty context and a wholly
+invented answer takes the identical path: band widened to ±0.35, `p_high` 0.398 against a RED cut
+point of 0.211, **RED** and escalated to a human. At T0 the same request is delivered and audited
+asynchronously.
+
+**Only hallucination detection degrades without context.** The Cost and Responsibility lanes need no
+grounding documents and continue to run in full on ungrounded traffic — token and retry telemetry,
+PII detection with Luhn validation, policy patterns and the async bias pass all still fire. What is
+lost is the ability to check a claim against a source, and that loss is declared rather than
+absorbed.
 
 **3 · Adaptive scrutiny.** Cheap deterministic signals run on 100% of traffic at ~2 ms and gate the
 ~100 ms verifier. In the reference run the verifier runs inline on **31% of held requests overall —
@@ -457,10 +477,12 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 
 ## Assumptions
 
-1. **The gateway is given grounding context.** The Performance lane verifies a response *against the
-   documents supplied with the request* (`aegis.context`, or system messages, where a RAG stack puts
-   retrieved passages). It checks faithfulness to provided context, not truth about the world. With
-   no context supplied, the verifier abstains and says so rather than guessing.
+1. **The gateway is usually given grounding context.** The Performance lane verifies a response
+   *against the documents supplied with the request* (`aegis.context`, or system messages, where a
+   RAG stack puts retrieved passages). It checks faithfulness to provided context, not truth about
+   the world. When no context is supplied the verifier does not guess — it declares the response
+   unverifiable, which widens the uncertainty band and fails closed on any held tier. See
+   [the two tradeoffs](#the-two-tradeoffs-everything-else-follows-from).
 2. **Request metadata is supplied by the calling application** — transaction value, user tier, data
    sensitivity, geography. A production deployment would derive these from the session rather than
    trust the caller. Retry counts are the exception: the gateway fingerprints prompts itself, so a

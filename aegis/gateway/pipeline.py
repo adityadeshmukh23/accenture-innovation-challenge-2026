@@ -110,6 +110,7 @@ class Evidence:
     gate_threshold: float = 0.0
     verifier_tokens: int = 0
     verifier_estimate_ms: float = 0.0
+    partial_reason: str = ""
 
 
 def gather_evidence(inp: CheckInput, policy: Policy, tier: StakesTier,
@@ -143,7 +144,21 @@ def gather_evidence(inp: CheckInput, policy: Policy, tier: StakesTier,
 
     trace = None
     partial = False
+    partial_reason = ""
     verifier_tokens = 0
+
+    # ---- MISSING EVIDENCE, CAUSE TWO --------------------------------------
+    # A request with no grounding context is not a verified request; it is an
+    # UNVERIFIABLE one. The Performance lane has nothing to check the response
+    # against, so every one of its features is zero -- which, without this,
+    # made p equal the model's base rate and delivered a $500k fabricated
+    # answer at GREEN with no escalation.
+    #
+    # This is the same condition as budget exhaustion wearing a different hat:
+    # in one case the verifier ran out of time to check, in the other there was
+    # nothing to check against. Both are missing evidence, both widen the
+    # uncertainty band, and the TIER decides which way the band falls.
+    ungrounded = bool(cheap.get("cheap_no_context", 0.0) >= 1.0)
 
     # Price this specific verification before deciding to start it: cost is
     # driven by document size, not by an average over past requests.
@@ -154,16 +169,32 @@ def gather_evidence(inp: CheckInput, policy: Policy, tier: StakesTier,
         if not budget.admit("verifier", required_ms=estimate, preemptible=True):
             skipped += 1
             partial = True
+            partial_reason = "verifier could not start: below the minimum useful slice"
             gate_reason += " | verifier skipped: below the minimum useful slice"
         else:
             with budget.segment("verifier"):
                 trace = run_verifier(inp, deadline=budget.expired, prepared=prep)
             COSTS.observe_verifier(trace.elapsed_ms, len(prep), max(1, trace.claims_total))
             partial = trace.budget_exhausted or trace.claims_checked < trace.claims_total
+            if partial:
+                partial_reason = (
+                    f"verification incomplete: {trace.claims_checked} of "
+                    f"{trace.claims_total} claims checked before the budget expired"
+                )
             # A real verifier LLM would consume tokens; price the equivalent.
             verifier_tokens = len(inp.context) // 4 + len(inp.response_text) // 4
     else:
         budget.note_skip("verifier", gate.reason)
+
+    if ungrounded:
+        partial = True
+        partial_reason = ("no grounding context supplied — the Performance lane had "
+                          "nothing to verify the response against")
+        budget.note_skip("verifier", partial_reason)
+    elif trace is not None and not trace.ran:
+        partial = True
+        partial_reason = trace.skip_reason or "verifier produced no evidence"
+        budget.note_skip("verifier", partial_reason)
 
     lane_features[Lane.PERFORMANCE].update(performance_features(trace, inp))
     lane_features[Lane.PERFORMANCE].update(
@@ -175,6 +206,7 @@ def gather_evidence(inp: CheckInput, policy: Policy, tier: StakesTier,
         partial=partial, skipped_checks=skipped, gate_reason=gate_reason,
         gated_in=run_it, cheap_score=gate.cheap_score, gate_threshold=gate.threshold,
         verifier_tokens=verifier_tokens, verifier_estimate_ms=estimate,
+        partial_reason=partial_reason,
     )
 
 
@@ -217,6 +249,8 @@ def decide(ev: Evidence, policy: Policy, tier: StakesTier) -> tuple[
                 f"base rate ({p_null:.4f}) — lane held at GREEN"
             )
         if partial:
+            if ev.partial_reason:
+                reasons.append(ev.partial_reason)
             reasons.append(
                 f"partial evidence: band widened to ±{width:.2f}, "
                 f"deciding on p_{'high' if direction == 'fail_closed' else 'low'} "
