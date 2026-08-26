@@ -30,8 +30,10 @@ still a hard failure -- the tolerance is for hardware, not for carelessness.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -107,6 +109,24 @@ def _within_tolerance(name: str, current: str, want: str) -> bool:
     return 1 / TOLERANCE <= a / b <= TOLERANCE
 
 
+@functools.lru_cache(maxsize=1)
+def test_count() -> str:
+    """How many tests this repo actually has, asked of pytest rather than
+    remembered. The README claimed 45 while the suite had grown to 96 --
+    precisely because this one figure sat outside the marker system that
+    already guards the metrics table. Collection only; nothing is executed.
+    """
+    out = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "--collect-only", str(ROOT / "tests")],
+        capture_output=True, text=True, cwd=ROOT)
+    hit = re.search(r"(\d+)\s+tests?\s+collected", out.stdout)
+    if not hit:
+        raise RuntimeError(
+            "could not determine the test count from pytest collection:\n"
+            + (out.stdout or out.stderr)[-800:])
+    return hit.group(1)
+
+
 def values(m: dict) -> dict[str, str]:
     lanes, inline = m["lanes"], m["lanes_inline"]
     o, lat, ad, cost, cal = (m["overall"], m["latency"], m["adaptive"],
@@ -147,6 +167,9 @@ def values(m: dict) -> dict[str, str]:
         "calib_n": str(cal.get("n", 0)),
 
         "perf_recall_inline": f"{inline['performance']['recall']:.3f}",
+
+        # Not from the run -- a property of the repo, asked of pytest.
+        "test_count": test_count(),
     }
     for ln in ("performance", "cost", "responsibility"):
         short = {"performance": "perf", "cost": "cost", "responsibility": "resp"}[ln]
@@ -158,7 +181,7 @@ def values(m: dict) -> dict[str, str]:
     return v
 
 
-def process(check_only: bool) -> int:
+def process(check_only: bool, rebase_reference: bool = False) -> int:
     src = metrics_path()
     if src is None:
         print("no metrics found — run `make demo` first", file=sys.stderr)
@@ -177,14 +200,24 @@ def process(check_only: bool) -> int:
                 problems.append(f"{doc.name}: unknown metric marker {name!r}")
                 return mo.group(0)
             want = vals[name]
-            if current != want:
+            if current == want:
+                return mo.group(0)
+
+            if name in MACHINE_DEPENDENT and not rebase_reference:
+                # These document the *reference machine*. Rewriting them from
+                # whatever laptop last ran `make sync-docs` would quietly
+                # relabel one machine's timings as the reference and destroy
+                # the distinction. Deliberate re-baselining takes
+                # --rebase-reference.
                 if check_only and _within_tolerance(name, current, want):
-                    # Expected hardware variance, not a stale document. Reported
-                    # below so it is visible, but it does not fail the build.
                     variance.append((doc.name, name, current, want))
                     return mo.group(0)
-                problems.append(f"{doc.name}: {name} is {current!r}, run says {want!r}")
-                updated += 1
+                if not check_only:
+                    variance.append((doc.name, name, current, want))
+                    return mo.group(0)
+
+            problems.append(f"{doc.name}: {name} is {current!r}, run says {want!r}")
+            updated += 1
             return f"<!--m:{name}-->{want}<!--/m-->"
 
         new = MARKER.sub(sub, text)
@@ -215,6 +248,11 @@ def process(check_only: bool) -> int:
         return 0
 
     print(f"synced {len(seen)} markers from {src.relative_to(ROOT)}, {updated} updated")
+    held = {name for _, name, _, _ in variance}
+    if held and not rebase_reference:
+        print(f"  {len(held)} machine-dependent figure(s) left at their reference values: "
+              f"{', '.join(sorted(held))}")
+        print("  (re-baseline them on the reference machine with --rebase-reference)")
     if unused:
         print(f"  ({len(unused)} available but unused: {', '.join(unused[:6])}…)")
     return 0
@@ -260,5 +298,9 @@ if __name__ == "__main__":
     ap.add_argument("--check", action="store_true", help="report drift without writing")
     ap.add_argument("--compare", action="store_true",
                     help="print documented reference figures beside this machine's run")
+    ap.add_argument("--rebase-reference", action="store_true",
+                    help="also rewrite machine-dependent figures — run this only on "
+                         "the machine whose measurements the README should quote")
     args = ap.parse_args()
-    raise SystemExit(compare() if args.compare else process(args.check))
+    raise SystemExit(compare() if args.compare
+                     else process(args.check, args.rebase_reference))

@@ -365,7 +365,7 @@ make help            # list every target
 make run             # gateway + dashboard only
 make scenarios       # replay the seeded set against a running gateway, print the scorecard
 make fit             # re-fit the lane models from the labelled corpus
-make test            # 45 unit + integration tests
+make test            # <!--m:test_count-->96<!--/m--> unit + integration tests
 make verify-ledger   # independently verify the audit ledger hash chain
 make tamper-demo     # prove tamper detection works, on a throwaway copy
 make clean           # remove venv, data and caches
@@ -641,7 +641,7 @@ ordinary hedged prose.
 aegis/            gateway package (api, risk, evidence, decision, adaptive, feedback, audit, dashboard)
 policies/         use-case policies + geography overlays
 scenarios/        seeds.yaml (evaluation + calibration) and the corpus documents
-tests/            45 tests, including the no-leakage proof
+tests/            <!--m:test_count-->96<!--/m--> tests, including the no-leakage proof
 docs/             demo video script and storyboard
 scripts/          demo runner, long-document generator
 ```

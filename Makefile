@@ -23,7 +23,9 @@ help:
 	@echo "  make fit            Re-fit the calibrated lane models from the corpus."
 	@echo "  make test           Run the unit + end-to-end test suite."
 	@echo "  make sync-docs      Regenerate the README/demo-script figures from the"
-	@echo "                      last run's data/metrics.json."
+	@echo "                      last run's data/metrics.json. Machine-dependent"
+	@echo "                      figures keep their reference values; re-baseline"
+	@echo "                      them with: make sync-docs REBASE=--rebase-reference"
 	@echo "  make verify-ledger  Independently verify the audit ledger hash chain."
 	@echo "  make tamper-demo    Prove the ledger detects tampering (non-destructive)."
 	@echo "  make clean          Remove venv, data dir and caches."
@@ -61,8 +63,10 @@ scenarios: $(PY)
 test: $(PY)
 	@$(PY) -m pytest -q
 
+REBASE ?=
+
 sync-docs: $(PY)
-	@$(PY) scripts/sync_docs.py
+	@$(PY) scripts/sync_docs.py $(REBASE)
 
 verify-ledger: $(PY)
 	@$(PY) -m aegis.tools.verify_ledger
