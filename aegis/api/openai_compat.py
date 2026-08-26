@@ -3,6 +3,13 @@
 Every response carries an extra `aegis` block: the decision, the confidence,
 the budget readout and the reasoning trace. Clients that ignore it get an
 ordinary OpenAI response with an already-enforced policy applied to the text.
+
+The block is *redacted by default*. Free text -- the model's raw response and
+the verifier's claim strings -- is withheld unless the caller opts in with
+`aegis.include_raw_trace`, and that opt-in is overridden whenever policy says
+the content may not be released (RED, edited, rerouted, or PII detected).
+Withholding a response's text and then shipping it in the metadata beside it
+would make the enforcement cosmetic.
 """
 from __future__ import annotations
 
@@ -19,7 +26,13 @@ from ..types import new_id
 router = APIRouter()
 
 
-def _envelope(decision, model: str) -> dict[str, Any]:
+def _raw_trace_opt_in(body: dict[str, Any]) -> bool:
+    """Opt-in for raw trace content. Off by default, and policy still wins:
+    `client_dict` re-redacts a RED / edited / PII-bearing response either way."""
+    return bool((body.get("aegis") or {}).get("include_raw_trace", False))
+
+
+def _envelope(decision, model: str, include_raw_trace: bool = False) -> dict[str, Any]:
     return {
         "id": decision.request_id,
         "object": "chat.completion",
@@ -31,7 +44,7 @@ def _envelope(decision, model: str) -> dict[str, Any]:
             "finish_reason": "stop",
         }],
         "usage": decision.usage,
-        "aegis": decision.to_dict(),
+        "aegis": decision.client_dict(include_raw_trace),
     }
 
 
@@ -42,9 +55,11 @@ async def chat_completions(request: Request):
     model = body.get("model", "aegis-mock-1")
     want_stream = bool(body.get("stream", False))
 
+    raw_trace = _raw_trace_opt_in(body)
+
     if not want_stream:
         decision = await run_pipeline(body, headers)
-        return JSONResponse(_envelope(decision, model))
+        return JSONResponse(_envelope(decision, model, raw_trace))
 
     async def gen():
         cid = new_id("chatcmpl")
@@ -63,7 +78,7 @@ async def chat_completions(request: Request):
             "id": cid, "object": "chat.completion.chunk", "created": int(time.time()),
             "model": model,
             "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-            "aegis": final.to_dict() if final else None,
+            "aegis": final.client_dict(raw_trace) if final else None,
         }
         yield f"data: {json.dumps(tail)}\n\n"
         yield "data: [DONE]\n\n"

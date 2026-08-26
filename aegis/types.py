@@ -25,6 +25,13 @@ class Decision(str, Enum):
     RED = "RED"
 
 
+#: Substituted for any free-text field withheld from a *client* response.
+#: The audit ledger and the operator dashboard still receive the full text --
+#: redaction applies at the client boundary only, so the record that justifies
+#: a decision is never weakened by it.
+REDACTED = "[redacted: withheld from the client by policy \u2014 see the audit ledger]"
+
+
 class StakesTier(str, Enum):
     """How much latency we are allowed to spend before releasing a response."""
 
@@ -98,9 +105,19 @@ class ClaimTrace:
     disagreement: float
     reasons: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, redact: bool = False) -> dict[str, Any]:
         d = asdict(self)
         d["verdict"] = self.verdict.value
+        if redact:
+            # `claim` quotes the response verbatim and `best_evidence` quotes the
+            # source document. `reasons` is the subtle one: it names the offending
+            # figures individually ("figure 6789 does not appear anywhere in the
+            # context"), so an SSN redacted from `claim` is still recoverable by
+            # reassembling the reasons. All three go; the scores stay.
+            d["claim"] = REDACTED
+            d["best_evidence"] = REDACTED
+            d["reasons"] = ([f"[redacted: {len(self.reasons)} reason(s) withheld by policy]"]
+                            if self.reasons else [])
         return d
 
 
@@ -122,13 +139,14 @@ class VerifierTrace:
     ran: bool = True
     skip_reason: str = ""
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, redact: bool = False) -> dict[str, Any]:
         return {
-            "question": self.question,
-            "model_answer": self.model_answer,
-            "verifier_extractive_answer": self.verifier_extractive_answer,
+            "question": REDACTED if redact else self.question,
+            "model_answer": REDACTED if redact else self.model_answer,
+            "verifier_extractive_answer": (
+                REDACTED if redact else self.verifier_extractive_answer),
             "answer_slot_disagreement": round(self.answer_slot_disagreement, 4),
-            "claims": [c.to_dict() for c in self.claims],
+            "claims": [c.to_dict(redact) for c in self.claims],
             "claims_total": self.claims_total,
             "claims_checked": self.claims_checked,
             "context_sentences": self.context_sentences,
@@ -254,7 +272,42 @@ class AegisDecision:
     ground_truth: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=lambda: time.time())
 
-    def to_dict(self) -> dict[str, Any]:
+    def redaction_required(self) -> tuple[bool, str]:
+        """Does policy forbid returning this response's raw text to the caller?
+
+        A RED decision reroutes the *visible* text to a safe template. If the
+        envelope alongside it still carried `original_text` and the verifier's
+        claim strings, the gateway would withhold the content and release it in
+        the same HTTP response. These are the conditions under which the raw
+        text must never leave, whatever the caller asked for.
+        """
+        if self.decision is Decision.RED:
+            return True, "decision is RED"
+        if self.retracted:
+            return True, "response was retracted after release"
+        if self.edits:
+            return True, "content was redacted, edited or rerouted"
+        if self.delivered_text != self.original_text:
+            return True, "delivered text differs from the model's raw response"
+        resp = self.lanes.get(Lane.RESPONSIBILITY.value)
+        if resp is not None and (resp.features.get("pii_count", 0.0) > 0.0
+                                 or resp.features.get("pii_severity", 0.0) > 0.0):
+            return True, "PII was detected in the response"
+        return False, ""
+
+    def client_dict(self, include_raw_trace: bool = False) -> dict[str, Any]:
+        """The client-facing view. Raw text is withheld unless it is both
+        safe *and* explicitly asked for -- opt-in never overrides policy."""
+        forced, why = self.redaction_required()
+        redact = forced or not include_raw_trace
+        if not forced and redact:
+            why = "raw trace not requested (set aegis.include_raw_trace to opt in)"
+        d = self.to_dict(redact=redact)
+        d["trace_redacted"] = redact
+        d["trace_redaction_reason"] = why
+        return d
+
+    def to_dict(self, redact: bool = False) -> dict[str, Any]:
         return {
             "request_id": self.request_id,
             "use_case": self.use_case,
@@ -268,8 +321,9 @@ class AegisDecision:
             "lanes": {k: v.to_dict() for k, v in self.lanes.items()},
             "prior": self.prior.to_dict(),
             "budget": self.budget.to_dict(),
-            "verifier_trace": self.verifier_trace.to_dict() if self.verifier_trace else None,
-            "original_text": self.original_text,
+            "verifier_trace": (self.verifier_trace.to_dict(redact)
+                               if self.verifier_trace else None),
+            "original_text": REDACTED if redact else self.original_text,
             "delivered_text": self.delivered_text,
             "edits": self.edits,
             "streamed": self.streamed,

@@ -46,18 +46,26 @@ def _body(use_case, geo, sensitivity, answer, context, stream):
 
 
 async def _post(body):
+    """Returns (assembled_text, aegis_block, raw_wire_bytes).
+
+    The third value is the point. An earlier version of this helper returned
+    only the assembled `delta.content` while its docstring claimed to check
+    "the bytes a client actually receives" -- so it never saw the metadata
+    envelope those deltas arrive inside, and missed PHI being shipped there.
+    """
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         if not body.get("stream"):
             r = await c.post("/v1/chat/completions", json=body, timeout=60)
             r.raise_for_status()
             data = r.json()
-            return data["choices"][0]["message"]["content"], data["aegis"]
+            return data["choices"][0]["message"]["content"], data["aegis"], r.text
 
-        text, aegis = "", None
+        text, aegis, raw = "", None, ""
         async with c.stream("POST", "/v1/chat/completions", json=body, timeout=60) as r:
             r.raise_for_status()
             async for line in r.aiter_lines():
+                raw += line + "\n"
                 if not line.startswith("data: "):
                     continue
                 chunk = line[6:].strip()
@@ -69,18 +77,20 @@ async def _post(body):
                     text += delta
                 if payload.get("aegis"):
                     aegis = payload["aegis"]
-        return text, aegis
+        return text, aegis, raw
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("geo", ["US", "EU"])
 async def test_stream_true_on_a_no_stream_policy_leaks_no_phi(geo):
     """The bytes on the wire must contain no PHI, and the verdict must not be GREEN."""
-    text, aegis = await _post(
+    text, aegis, raw = await _post(
         _body("clinical_intake", geo, "phi", PHI_ANSWER, INTAKE_CONTEXT, stream=True))
 
     leaked = [m for m in PHI_MARKERS if m in text]
     assert not leaked, f"PHI streamed to the client despite stream_tiers: [] -> {leaked}"
+    in_envelope = [m for m in PHI_MARKERS if m in raw]
+    assert not in_envelope, f"PHI shipped in the metadata envelope -> {in_envelope}"
     assert aegis is not None, "no aegis decision returned on the stream"
     assert aegis["decision"] != "GREEN", "unaudited PHI response was approved"
     assert aegis["streamed"] is False, "record claims it streamed when policy forbade it"
@@ -89,21 +99,22 @@ async def test_stream_true_on_a_no_stream_policy_leaks_no_phi(geo):
 @pytest.mark.asyncio
 async def test_stream_and_nonstream_agree_on_a_no_stream_policy():
     """The transport must not change the safety posture."""
-    s_text, s_aegis = await _post(
+    s_text, s_aegis, s_raw = await _post(
         _body("clinical_intake", "EU", "phi", PHI_ANSWER, INTAKE_CONTEXT, stream=True))
-    n_text, n_aegis = await _post(
+    n_text, n_aegis, n_raw = await _post(
         _body("clinical_intake", "EU", "phi", PHI_ANSWER, INTAKE_CONTEXT, stream=False))
 
     assert s_aegis["decision"] == n_aegis["decision"] == "RED"
     assert s_aegis["escalate_to_human"] == n_aegis["escalate_to_human"] is True
     for m in PHI_MARKERS:
         assert m not in s_text and m not in n_text
+        assert m not in s_raw and m not in n_raw, f"transport changed PHI exposure: {m}"
 
 
 @pytest.mark.asyncio
 async def test_a_policy_that_permits_streaming_still_streams():
     """The gate must not break the low-stakes streaming path it does not govern."""
-    text, aegis = await _post(_body(
+    text, aegis, _raw = await _post(_body(
         "support_copilot", "US", "public",
         "The returns window is 30 days from the date of delivery.",
         SUPPORT_CONTEXT, stream=True))

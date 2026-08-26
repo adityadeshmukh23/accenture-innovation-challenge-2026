@@ -390,8 +390,22 @@ curl -s http://127.0.0.1:8000/v1/chat/completions -H 'content-type: application/
 ```
 
 The response is an ordinary OpenAI completion with an added `aegis` block carrying the decision,
-confidence, budget readout and full reasoning trace. A client that ignores that block still gets a
+confidence, budget readout and reasoning trace. A client that ignores that block still gets a
 response with the policy already enforced on its text.
+
+**Free text in that block is redacted by default.** The model's raw response (`original_text`) and
+the verifier's claim strings are withheld unless you ask for them with `"include_raw_trace": true`,
+and that opt-in is *overridden* whenever policy says the content may not leave: a RED decision, an
+edited or rerouted response, a retraction, or any response with detected PII. The block always
+reports which applied, via `trace_redacted` and `trace_redaction_reason`.
+
+The reason this is not merely tidy: withholding a response's text and then shipping that same text
+in the metadata beside it makes the enforcement cosmetic. A `clinical_intake` RED under the EU
+overlay reroutes the visible answer to a safe template — if `original_text` still carried the MRN
+and SSN, the gateway would have ruled the content unreleasable and released it in the same HTTP
+response. Redaction applies at the client boundary only: the **audit ledger and the operator
+dashboard still receive the full text**, because an audit trail that redacts what it is auditing is
+worthless.
 
 ### Using a real model
 
