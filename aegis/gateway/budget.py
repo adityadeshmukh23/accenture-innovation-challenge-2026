@@ -107,12 +107,20 @@ class CostModel:
 COSTS = CostModel()
 
 
+#: The one clock the deadline reads. Named so a test can substitute a
+#: deterministic one: whether the verifier is preempted mid-document is
+#: otherwise a property of how fast the machine is, which makes any test
+#: asserting on preemption a coin flip on unfamiliar hardware.
+def _now() -> float:
+    return time.perf_counter()
+
+
 class DeadlineBudget:
     def __init__(self, total_ms: int, cost_model: CostModel | None = None, label: str = "inline"):
         self.total_ms = int(total_ms)
         self.label = label
         self.costs = cost_model or COSTS
-        self._start = time.perf_counter()
+        self._start = _now()
         self.segments: list[dict[str, Any]] = []
         self.skipped: list[dict[str, Any]] = []
         self.shortfalls: list[dict[str, Any]] = []
@@ -120,7 +128,7 @@ class DeadlineBudget:
 
     # -- clock ------------------------------------------------------------- #
     def elapsed_ms(self) -> float:
-        return (time.perf_counter() - self._start) * 1000.0
+        return (_now() - self._start) * 1000.0
 
     def remaining_ms(self) -> float:
         return self.total_ms - self.elapsed_ms()
@@ -190,11 +198,11 @@ class DeadlineBudget:
     # -- accounting -------------------------------------------------------- #
     @contextmanager
     def segment(self, name: str) -> Iterator["DeadlineBudget"]:
-        t0 = time.perf_counter()
+        t0 = _now()
         try:
             yield self
         finally:
-            ms = (time.perf_counter() - t0) * 1000.0
+            ms = (_now() - t0) * 1000.0
             self.costs.observe(name, ms)
             self.segments.append({
                 "name": name,
