@@ -430,6 +430,15 @@ dashboard cannot drift from the records that justify it. Reference run (`make de
 > stale number in this README fails the build rather than surviving to a reader. This exists because
 > the previous revision shipped a requirements-mapping row quoting a p95 twenty times lower than the
 > latency table below it — both supposedly from the same run.
+>
+> **Two tiers, because two kinds of figure fail differently.** Everything fixed by the seed —
+> per-lane precision/recall/F1 against the seeded set, final accuracy, cost per request, calibration,
+> counts, the test count — must match **exactly** on any machine, and `make test` enforces that. The
+> figures marked 📐 below are **measured on the reference machine; expect variance on other
+> hardware**: wall-clock latency, and anything derived from how much verification your machine
+> completed inside the 300 ms deadline. Those are compared within a tolerance rather than pinned, so
+> a clean clone on faster hardware does not fail its own build — and `make demo` prints your
+> machine's values beside these, so you see both rather than an apparent contradiction.
 
 ### Per lane, against seeded ground truth
 
@@ -447,9 +456,12 @@ non-zero and honest, and so the λ slider has something real to trade against. A
 
 ### Inline vs final — the latency tradeoff, quantified
 
+📐 *Both inline columns are machine-dependent: a faster machine checks more claims before
+preemption and catches more of them inline. The **final** column is deterministic.*
+
 | View | Decision accuracy | Performance recall |
 |---|---|---|
-| **Inline** (what the user received at request time) | <!--m:acc_inline_pct-->81.0%<!--/m--> (<!--m:acc_inline_frac-->17/21<!--/m-->) | <!--m:perf_recall_inline-->0.727<!--/m--> |
+| **Inline** 📐 (what the user received at request time) | <!--m:acc_inline_pct-->81.0%<!--/m--> (<!--m:acc_inline_frac-->17/21<!--/m-->) | <!--m:perf_recall_inline-->0.727<!--/m--> |
 | **Final** (after the async deep pass) | <!--m:acc_final_pct-->95.2%<!--/m--> (<!--m:acc_final_frac-->20/21<!--/m-->) | <!--m:perf_reca-->1.000<!--/m--> |
 
 Reporting only one of these would mislead in opposite directions: inline alone ignores every
@@ -458,14 +470,17 @@ time. The gap *is* the cost of streaming, stated numerically.
 
 ### Latency
 
-| Figure | Value |
+📐 *Every figure in this table is measured on the reference machine. Expect variance on other
+hardware — `make demo` prints your machine's values beside these.*
+
+| Figure | Value (reference machine) |
 |---|---|
-| Inline overhead p50 | **<!--m:lat_p50-->2.3<!--/m--> ms** |
+| Inline overhead p50 📐 | **<!--m:lat_p50-->2.3<!--/m--> ms** |
 | Inline overhead, streamed requests | **0.0 ms** |
-| Within their own policy budget | **<!--m:within_budget_frac-->51/53<!--/m--> (<!--m:within_budget_pct-->96%<!--/m-->)** |
-| p95 overhead as % of its own budget | **<!--m:budget_pct_p95-->1.8%<!--/m-->** |
-| Budget exhausted | <!--m:budget_exhausted_frac-->2/53<!--/m--> — the two seeded budget-miss scenarios |
-| Inline overhead p95 (raw ms) | <!--m:lat_p95-->125.2<!--/m--> ms |
+| Within their own policy budget 📐 | **<!--m:within_budget_frac-->51/53<!--/m--> (<!--m:within_budget_pct-->96%<!--/m-->)** |
+| p95 overhead as % of its own budget 📐 | **<!--m:budget_pct_p95-->1.8%<!--/m-->** |
+| Budget exhausted 📐 | <!--m:budget_exhausted_frac-->2/53<!--/m--> — the two seeded budget-miss scenarios |
+| Inline overhead p95 (raw ms) 📐 | <!--m:lat_p95-->125.2<!--/m--> ms |
 
 Two notes on reading these honestly. Overhead is compared against *each request's own* budget —
 mixing a 300 ms interactive budget with a 30 s batch budget into one percentile would flatter both,

@@ -37,6 +37,8 @@ done
 
 "$PY" -m scenarios.runner --base-url "$BASE" --settle 5
 
+"$PY" scripts/sync_docs.py --compare
+
 echo
 echo "  ${bold}verifying the audit ledger independently of the app…${reset}"
 "$PY" -m aegis.tools.verify_ledger
