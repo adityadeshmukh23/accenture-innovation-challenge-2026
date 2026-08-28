@@ -21,6 +21,7 @@ dashboard at <http://127.0.0.1:8000>. It runs entirely offline — no API key, n
 | | |
 |---|---|
 | **Demo video (2–3 min)** | ⚠️ **NOT YET RECORDED — replace this line with the hosted link before submitting.** Shot-by-shot script and storyboard: [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) |
+| **Business proposal deck** | [`docs/AEGIS_R2_Business_Proposal.pptx`](docs/AEGIS_R2_Business_Proposal.pptx) — 14 slides, on the Round 1 template |
 | **Public repository** | <https://github.com/adityadeshmukh23/accenture-innovation-challenge-2026> |
 
 The video walks the seeded RED case being flagged, held and rerouted live on the dashboard, the
