@@ -5,18 +5,32 @@ so slides cannot be rendered. Liberation Sans is metric-compatible with Arial
 Reports, per shape: estimated wrapped line count vs. available height, plus
 slide-bounds and pairwise-overlap violations.
 """
+import os
 import sys
 from pptx import Presentation
 from pptx.util import Emu
 from PIL import ImageFont
 
 EMU_IN = 914400
-FONTS = {
-    (False, False): "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    (True,  False): "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    (False, True):  "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
-    (True,  True):  "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf",
-}
+
+#: Metric source for the template's body font. Liberation Sans is
+#: metric-compatible with Arial; macOS ships Arial itself, which is better
+#: still. Resolved at import so the checker runs on either machine rather than
+#: only on the Linux box it was first written on -- an unrunnable layout check
+#: is the same as no layout check.
+_FONT_SETS = [
+    {(False, False): "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+     (True,  False): "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+     (False, True):  "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf",
+     (True,  True):  "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf"},
+    {(False, False): "/System/Library/Fonts/Supplemental/Arial.ttf",
+     (True,  False): "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+     (False, True):  "/System/Library/Fonts/Supplemental/Arial Italic.ttf",
+     (True,  True):  "/System/Library/Fonts/Supplemental/Arial Bold Italic.ttf"},
+]
+FONTS = next((f for f in _FONT_SETS if all(os.path.exists(p) for p in f.values())), None)
+if FONTS is None:
+    sys.exit("fitcheck: no Arial-metric font set found (Liberation Sans or macOS Arial)")
 PX_PER_PT = 4.0   # render at 4x for sub-pixel accuracy, divide back out
 _cache = {}
 

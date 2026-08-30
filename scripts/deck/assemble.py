@@ -124,6 +124,22 @@ x = re.sub(r"<p:sldIdLst>.*?</p:sldIdLst>",
 px.write_text(x, encoding="utf-8")
 print(f"slide order set: {len(order)} slides, video slide dropped")
 
+# --- 7b. drop the R1 video slide's part entirely -----------------------------
+# It is already out of the slide order; leaving the part in the package ships a
+# slide nobody can reach. Remove the part, its rels, its content-type override
+# and its presentation relationship so the package holds exactly the 14 slides
+# the deck actually presents.
+dead = "slide5.xml"
+(SL / dead).unlink(missing_ok=True)
+(SL / "_rels" / f"{dead}.rels").unlink(missing_ok=True)
+c = ct.read_text(encoding="utf-8")
+c = re.sub(r'<Override PartName="/ppt/slides/' + dead + r'"[^>]*/>', "", c)
+ct.write_text(c, encoding="utf-8")
+r2 = pr.read_text(encoding="utf-8")
+r2 = re.sub(r'<Relationship Id="rId\d+"[^>]*Target="slides/' + dead + r'"[^>]*/>', "", r2)
+pr.write_text(r2, encoding="utf-8")
+print(f"pruned {dead} (R1 video slide, not in the deck order)")
+
 # --- 8. repack --------------------------------------------------------------
 out = ROOT / "AEGIS_R2_Business_Proposal.pptx"
 if out.exists(): out.unlink()

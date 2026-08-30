@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import functools
 import json
+import math
 import re
 import subprocess
 import sys
@@ -99,6 +100,24 @@ def _numeric(s: str) -> float | None:
         return float(re.sub(r"[^0-9.]", "", s) or "nan")
     except (ValueError, ZeroDivisionError):
         return None
+
+
+def _wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """95% Wilson score interval for k successes in n trials.
+
+    Wilson rather than the normal approximation because every interesting
+    proportion here sits at or near 1.0 on a single-digit denominator, which is
+    exactly where the normal approximation degenerates: it returns a zero-width
+    interval for 6/6 and can run past 1.0 elsewhere. Wilson stays inside [0, 1]
+    and keeps a sane width at k == n, which is the whole point of reporting it.
+    """
+    if n <= 0:
+        return (0.0, 0.0)
+    p = k / n
+    d = 1.0 + z * z / n
+    centre = (p + z * z / (2 * n)) / d
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return (max(0.0, centre - half), min(1.0, centre + half))
 
 
 def _within_tolerance(name: str, current: str, want: str) -> bool:
@@ -182,6 +201,14 @@ def values(m: dict) -> dict[str, str]:
         for k in ("precision", "recall", "f1", "false_positive_rate", "false_negative_rate"):
             key = {"false_positive_rate": "fpr", "false_negative_rate": "fnr"}.get(k, k[:4])
             v[f"{short}_{key}"] = f"{lane(ln, k):.3f}"
+        # Interval and denominator for each rate, so the README cannot quote a
+        # point estimate without the n it rests on. Precision is over predicted
+        # positives (tp+fp); recall is over actual positives (tp+fn).
+        tp, fp, fn = lane(ln, "tp"), lane(ln, "fp"), lane(ln, "fn")
+        for key, k_, n_ in (("prec", tp, tp + fp), ("reca", tp, tp + fn)):
+            lo, hi = _wilson(k_, n_)
+            v[f"{short}_{key}_ci"] = f"[{lo:.2f}, {hi:.2f}]"
+            v[f"{short}_{key}_n"] = str(n_)
     return v
 
 

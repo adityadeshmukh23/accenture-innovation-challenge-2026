@@ -46,6 +46,13 @@ credentials.json
 .claude/
 .aider*
 
+# --- Deck build artifacts ---------------------------------------------------
+# scripts/deck/assemble.py unpacks the R1 template into scripts/deck/unpacked/
+# and writes the built deck beside itself. The shipped deck is the copy under
+# docs/; both of these are regenerable outputs.
+scripts/deck/unpacked/
+scripts/deck/*.pptx
+
 # --- JS (none today; the dashboard is dependency-free vanilla JS) ------------
 node_modules/
 npm-debug.log*

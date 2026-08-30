@@ -134,13 +134,18 @@ def s_quality():
             ("Precision", ["0.917", "1.000", "1.000"], 8.30, 1.32, "ctr"),
             ("Recall", ["1.000", "1.000", "1.000"], 9.70, 1.32, "ctr"),
             ("F1", ["0.957", "1.000", "1.000"], 11.10, 1.40, "ctr")]
+    # Row order is Performance, Cost, Responsibility. The Cost row is rendered
+    # muted rather than in body ink: it rests on a single positive example, and
+    # printing it at the same weight as a 12-example rate overstates it.
+    ROW_INK = [INK, MUTED, INK]
     for head, vals, x, w, al in cols:
         ps = [para([run(head, 900, B, PURPLE)], align=None if al == "l" else al, space_after=280)]
-        for v in vals:
-            ps.append(para([run(v, 1000, al != "l", INK)],
+        for v, ink in zip(vals, ROW_INK):
+            ps.append(para([run(v, 1000, al != "l", ink)],
                            align=None if al == "l" else al, space_after=240))
         S.append(shape("col", x, 1.76, w, 1.50, ps, ins=(0.02, 0.02, 0.02, 0.02)))
-    S.append(card(ML, 3.46, CW, 1.12, "THE SINGLE FALSE POSITIVE IS DELIBERATE",
+    CW2 = (CW - 0.27) / 2
+    S.append(card(ML, 3.46, CW2, 1.45, "THE SINGLE FALSE POSITIVE IS DELIBERATE",
                   [run("fin_overflag_01 is a substantively correct answer — “a shade over "
                        "four percent after charges” — expressed in words rather than "
                        "figures, so numeric grounding finds nothing to match. It exists so the "
@@ -148,6 +153,15 @@ def s_quality():
                        "slider has something real to trade against. A checker scoring 1.000 on "
                        "everything would mean the corpus was too easy, not that the checker was "
                        "good.", 950)]))
+    S.append(card(ML + CW2 + 0.27, 3.46, CW2, 1.45,
+                  "WHAT THESE RATES REST ON — 95% CI",
+                  [run("Performance 0.917 over 12 predicted positives — CI [0.65, 0.99]. "
+                       "Responsibility 1.000 over 6 — CI [0.61, 1.00]. ", 950),
+                   run("Cost 1.000 over a single positive — CI [0.21, 1.00]: demonstrated on "
+                       "one example, not statistically measured.", 950, B),
+                   run(" Read that row as the mechanism firing on the case it was built for, "
+                       "not as a detection rate. Wilson intervals, generated with the figures "
+                       "they qualify.", 950)]))
     trio = [("CALIBRATION", "Brier 0.073, ECE 0.100 across 63 lane-decisions. The models are "
              "fitted by running the real checks over every corpus row — no hand-written vectors."),
             ("EVIDENCE BOUNDARY", "Checks receive only (question, context, response, telemetry). "
@@ -155,8 +169,8 @@ def s_quality():
             ("TEST SUITE", "96 tests, including the no-leakage proof, the ledger tamper proof, "
              "and a guard that fails the build if any documented figure drifts from the run.")]
     for x, (h, b) in zip(COL3, trio):
-        S.append(card(x, 4.70, COL3W, 1.12, h, [run(b, 900)], tinted=False, hsz=1000))
-    S.append(shape("note", ML, 5.96, CW, 0.62,
+        S.append(card(x, 5.03, COL3W, 1.12, h, [run(b, 900)], tinted=False, hsz=1000))
+    S.append(shape("note", ML, 6.27, CW, 0.62,
                    [para([run("Reproducibility: ", 900, B, PURPLE),
                           run("every figure on this slide is deterministic — an independent "
                               "cold-clone run on different hardware reproduced all of them "

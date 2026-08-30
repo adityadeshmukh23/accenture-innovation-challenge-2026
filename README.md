@@ -455,6 +455,33 @@ than figures, so numeric grounding finds nothing to match. It exists so the fals
 non-zero and honest, and so the λ slider has something real to trade against. A checker that scored
 1.000 on everything would mean the corpus was too easy, not that the checker was good.
 
+### What those rates are actually worth
+
+A rate is only as good as the count beneath it, and these counts are small. The 95% Wilson intervals
+below are computed from the same confusion matrix by `make sync-docs` — they are generated, not
+typed, and drift in them fails the build like every other figure here.
+
+| Lane | Precision | *n* | 95% CI | Recall | *n* | 95% CI |
+|---|---|---|---|---|---|---|
+| performance | <!--m:perf_prec-->0.917<!--/m--> | <!--m:perf_prec_n-->12<!--/m--> | <!--m:perf_prec_ci-->[0.65, 0.99]<!--/m--> | <!--m:perf_reca-->1.000<!--/m--> | <!--m:perf_reca_n-->11<!--/m--> | <!--m:perf_reca_ci-->[0.74, 1.00]<!--/m--> |
+| responsibility | <!--m:resp_prec-->1.000<!--/m--> | <!--m:resp_prec_n-->6<!--/m--> | <!--m:resp_prec_ci-->[0.61, 1.00]<!--/m--> | <!--m:resp_reca-->1.000<!--/m--> | <!--m:resp_reca_n-->6<!--/m--> | <!--m:resp_reca_ci-->[0.61, 1.00]<!--/m--> |
+| cost | <!--m:cost_prec-->1.000<!--/m--> | <!--m:cost_prec_n-->1<!--/m--> | <!--m:cost_prec_ci-->[0.21, 1.00]<!--/m--> | <!--m:cost_reca-->1.000<!--/m--> | <!--m:cost_reca_n-->1<!--/m--> | <!--m:cost_reca_ci-->[0.21, 1.00]<!--/m--> |
+
+**The Cost lane is demonstrated on one example, not statistically measured.** Its 1.000 / 1.000 rests
+on a single positive — `sup_cost_storm_01` — and an interval of <!--m:cost_prec_ci-->[0.21, 1.00]<!--/m--> carries
+essentially no information. Read that row as *"the mechanism fires correctly on the case it was built
+for"*, not as a measured detection rate. It is reported at the same precision as the other lanes
+because suppressing it would be worse, but it should not be read as comparable evidence.
+
+Performance, at <!--m:perf_prec_n-->12<!--/m--> predicted positives, is the only lane whose rate is
+worth quoting on its own — and even it is consistent with a true precision as low as the bottom of
+its interval. Responsibility sits between the two. **None of these intervals is narrow enough to
+support a claim about production performance**; they bound what a 21-scenario seeded set can
+establish, which is a demonstration, not an estimate.
+
+*Wilson rather than the normal approximation, deliberately: at 6/6 and 1/1 the normal interval
+collapses to zero width, which would present the smallest samples as the most certain ones.*
+
 ### Inline vs final — the latency tradeoff, quantified
 
 📐 *Both inline columns are machine-dependent: a faster machine checks more claims before
