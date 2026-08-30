@@ -20,7 +20,7 @@ dashboard at <http://127.0.0.1:8000>. It runs entirely offline — no API key, n
 
 | | |
 |---|---|
-| **Demo video (2–3 min)** | <https://drive.google.com/file/d/1YZuDMAda0qflqeJNDB1kYrpFdGVIGQd1/view?usp=sharing> |
+| **Demo video (4:44)** | <https://drive.google.com/file/d/1YZuDMAda0qflqeJNDB1kYrpFdGVIGQd1/view?usp=sharing> |
 | **Business proposal deck** | [`docs/AEGIS_R2_Business_Proposal.pptx`](docs/AEGIS_R2_Business_Proposal.pptx) — 14 slides, on the Round 1 template |
 | **Public repository** | <https://github.com/adityadeshmukh23/accenture-innovation-challenge-2026> |
 
