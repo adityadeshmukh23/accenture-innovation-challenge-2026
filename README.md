@@ -145,8 +145,6 @@ because starting what you cannot finish spends the budget and returns nothing.
 
 **2 · Missing evidence is never silent — and it has exactly one meaning.**
 
-Two different things stop the Performance lane from checking a response:
-
 > **If the verifier ran out of budget, it couldn't check. If no context was supplied, it also
 > couldn't check. Both produce missing evidence; the tier decides which way the uncertainty band
 > falls.**
@@ -175,12 +173,10 @@ lost is the ability to check a claim against a source, and that loss is declared
 absorbed.
 
 **3 · Adaptive scrutiny.** Cheap deterministic signals run on 100% of traffic at ~2 ms and gate the
-~100 ms verifier. In the reference run the verifier runs inline on **<!--m:verif_pct-->32%<!--/m--> of held requests
-overall — and <!--m:support_verif_pct-->5%<!--/m--> of low-stakes support traffic** — while still reaching
-<!--m:perf_reca-->1.000<!--/m--> recall on the Performance lane after the async pass. A proportional controller nudges the gate toward each policy's target rate,
-and a seeded **exploration sample** verifies a fraction of *ungated* traffic on purpose: without it,
-every estimate of the verifier's catch rate is conditioned on the gate having already fired, and the
-false-negative rate on ungated traffic is unobservable.
+~100 ms verifier; a proportional controller nudges the gate toward each policy's target rate. A
+seeded **exploration sample** verifies a fraction of *ungated* traffic on purpose: without it, every
+estimate of the catch rate is conditioned on the gate having already fired, and the false-negative
+rate on ungated traffic is unobservable. ([What it costs and catches](#adaptive-scrutiny).)
 
 ### Over-flagging vs under-flagging
 
@@ -214,9 +210,8 @@ evidence; it is not an argument for acting on *no* evidence. (This was a real bu
 summary with every feature at zero scored 0.0285 against a 0.023 threshold and was being auto-edited
 on the strength of nothing.)
 
-**The feedback endpoint is a poisoning surface, and is guarded as one.** A loop that turns human
-clicks into training data is an attack surface by construction. Two guards, addressing two different
-things:
+**The feedback endpoint is a poisoning surface, and is guarded as one.** Two guards, addressing two
+different things:
 
 * **Rate limit** — a sliding window per operator and globally (`AEGIS_OVERRIDE_LIMIT`, default 10 per
   10 minutes). Blunt, and the reason the endpoint is no longer unbounded.
@@ -394,19 +389,15 @@ The response is an ordinary OpenAI completion with an added `aegis` block carryi
 confidence, budget readout and reasoning trace. A client that ignores that block still gets a
 response with the policy already enforced on its text.
 
-**Free text in that block is redacted by default.** The model's raw response (`original_text`) and
-the verifier's claim strings are withheld unless you ask for them with `"include_raw_trace": true`,
-and that opt-in is *overridden* whenever policy says the content may not leave: a RED decision, an
-edited or rerouted response, a retraction, or any response with detected PII. The block always
-reports which applied, via `trace_redacted` and `trace_redaction_reason`.
-
-The reason this is not merely tidy: withholding a response's text and then shipping that same text
-in the metadata beside it makes the enforcement cosmetic. A `clinical_intake` RED under the EU
-overlay reroutes the visible answer to a safe template — if `original_text` still carried the MRN
-and SSN, the gateway would have ruled the content unreleasable and released it in the same HTTP
-response. Redaction applies at the client boundary only: the **audit ledger and the operator
-dashboard still receive the full text**, because an audit trail that redacts what it is auditing is
-worthless.
+**Free text in that block is redacted by default.** The raw response (`original_text`) and the
+verifier's claim strings need `"include_raw_trace": true` — and that opt-in is *overridden* whenever
+policy says the content may not leave: RED, edited, rerouted, retracted, or any detected PII.
+`trace_redacted` and `trace_redaction_reason` always report which applied. Without this, enforcement
+is cosmetic: a `clinical_intake` RED under the EU overlay reroutes the visible answer to a safe
+template, and an `original_text` still carrying the MRN and SSN would release, in the same HTTP
+response, exactly what the gateway just ruled unreleasable. Redaction is at the **client boundary
+only** — the audit ledger and operator dashboard still receive the full text, because an audit trail
+that redacts what it is auditing is worthless.
 
 ### Using a real model
 
@@ -433,13 +424,12 @@ dashboard cannot drift from the records that justify it. Reference run (`make de
 > latency table below it — both supposedly from the same run.
 >
 > **Two tiers, because two kinds of figure fail differently.** Everything fixed by the seed —
-> per-lane precision/recall/F1 against the seeded set, final accuracy, cost per request, calibration,
-> counts, the test count — must match **exactly** on any machine, and `make test` enforces that. The
-> figures marked 📐 below are **measured on the reference machine; expect variance on other
-> hardware**: wall-clock latency, and anything derived from how much verification your machine
-> completed inside the 300 ms deadline. Those are compared within a tolerance rather than pinned, so
-> a clean clone on faster hardware does not fail its own build — and `make demo` prints your
-> machine's values beside these, so you see both rather than an apparent contradiction.
+> per-lane rates, final accuracy, cost, calibration, counts, the test count — must match **exactly**
+> on any machine, and `make test` enforces that. **📐 marks the rest: wall-clock latency, and
+> anything derived from how much verification your machine finished inside the 300 ms deadline
+> (`budget_miss_01` above all).** Those are compared within a tolerance rather than pinned, so a
+> faster clone does not fail its own build, and `make demo` prints your machine's values beside
+> these.
 
 ### Per lane, against seeded ground truth
 
@@ -484,9 +474,6 @@ collapses to zero width, which would present the smallest samples as the most ce
 
 ### Inline vs final — the latency tradeoff, quantified
 
-📐 *Both inline columns are machine-dependent: a faster machine checks more claims before
-preemption and catches more of them inline. The **final** column is deterministic.*
-
 | View | Decision accuracy | Performance recall |
 |---|---|---|
 | **Inline** 📐 (what the user received at request time) | <!--m:acc_inline_pct-->81.0%<!--/m--> (<!--m:acc_inline_frac-->17/21<!--/m-->) | <!--m:perf_recall_inline-->0.727<!--/m--> |
@@ -498,9 +485,6 @@ time. The gap *is* the cost of streaming, stated numerically.
 
 ### Latency
 
-📐 *Every figure in this table is measured on the reference machine. Expect variance on other
-hardware — `make demo` prints your machine's values beside these.*
-
 | Figure | Value (reference machine) |
 |---|---|
 | Inline overhead p50 📐 | **<!--m:lat_p50-->2.3<!--/m--> ms** |
@@ -510,12 +494,12 @@ hardware — `make demo` prints your machine's values beside these.*
 | Budget exhausted 📐 | <!--m:budget_exhausted_frac-->2/53<!--/m--> — the two seeded budget-miss scenarios |
 | Inline overhead p95 (raw ms) 📐 | <!--m:lat_p95-->125.2<!--/m--> ms |
 
-Two notes on reading these honestly. Overhead is compared against *each request's own* budget —
-mixing a 300 ms interactive budget with a 30 s batch budget into one percentile would flatter both,
-which is why **p95 as a share of its own budget (<!--m:budget_pct_p95-->1.8%<!--/m-->)** is the meaningful figure.
-And the raw p95 is not representative of ordinary traffic: two of <!--m:held-->53<!--/m--> held requests are
-*deliberately* pathological 5,000-clause budget-miss scenarios, and at that sample size the 95th
-percentile lands on one of them. The median, <!--m:lat_p50-->2.3<!--/m--> ms, is what normal traffic costs.
+Read these two ways. Overhead is measured against *each request's own* budget — pooling a 300 ms
+interactive budget with a 30 s batch one would flatter both — so **p95 as a share of its own budget
+(<!--m:budget_pct_p95-->1.8%<!--/m-->)** is the meaningful figure. And the raw p95 is not ordinary
+traffic: two of <!--m:held-->53<!--/m--> held requests are deliberately pathological 5,000-clause
+budget-miss scenarios, and at that sample size the 95th percentile lands on one. The median,
+<!--m:lat_p50-->2.3<!--/m--> ms, is what normal traffic costs.
 
 ### Adaptive scrutiny
 
@@ -530,11 +514,6 @@ Estimated **<!--m:cost_per_request-->$0.00237<!--/m--> per request**, with the v
 <!--m:verifier_token_share-->96.4%<!--/m--> of tokens — which is precisely why gating it matters.
 Calibration: **Brier <!--m:brier-->0.073<!--/m-->, ECE <!--m:ece-->0.100<!--/m-->** over <!--m:calib_n-->63<!--/m--> lane-decisions.
 Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
-
-> **Reproducibility note.** With `AEGIS_SEED=1337` the decision path is deterministic, with one
-> honest exception: `budget_miss_01` depends on how much verification your machine completes inside
-> 300 ms. On a faster machine it may check more claims before preemption. The *fallback behaviour*
-> is deterministic; the exact claim count is not.
 
 ---
 
@@ -575,33 +554,29 @@ Per-lane fitted Brier: performance 0.036, cost 0.016, responsibility 0.006.
 
 ## Assumptions
 
-1. **The gateway is usually given grounding context.** The Performance lane verifies a response
-   *against the documents supplied with the request* (`aegis.context`, or system messages, where a
-   RAG stack puts retrieved passages). It checks faithfulness to provided context, not truth about
-   the world. When no context is supplied the verifier does not guess — it declares the response
-   unverifiable, which widens the uncertainty band and fails closed on any held tier. See
-   [the two tradeoffs](#the-two-tradeoffs-everything-else-follows-from).
+1. **The gateway is usually given grounding context.** The Performance lane checks faithfulness to
+   the documents supplied with the request (`aegis.context`, or system messages, where a RAG stack
+   puts retrieved passages) — not truth about the world. With no context it declares the response
+   unverifiable rather than guessing, which widens the band and fails closed on any held tier.
 2. **Request metadata is supplied by the calling application** — transaction value, user tier, data
-   sensitivity, geography. A production deployment would derive these from the session rather than
-   trust the caller. Retry counts are the exception: the gateway fingerprints prompts itself, so a
-   client that under-reports retries is still caught.
-3. **All data is synthetic.** The fund factsheet, support policy, clinical intake note and 5,000-clause
-   contract are machine-generated for this demo. No real personal, clinical or financial data is used
-   anywhere. Card numbers in scenarios are Luhn-valid test values, not issued cards.
+   sensitivity, geography. Production would derive these from the session rather than trust the
+   caller. Retry counts are the exception: the gateway fingerprints prompts itself, so a client that
+   under-reports retries is still caught.
+3. **All data is synthetic.** The fund factsheet, support policy, clinical intake note and
+   5,000-clause contract are machine-generated. No real personal, clinical or financial data appears
+   anywhere; card numbers are Luhn-valid test values, not issued cards.
 4. **Token prices are indicative.** The cost-per-check figure uses representative per-1K rates; the
    ratio between checks is what the demo demonstrates, not the absolute dollar value.
 5. **In mock mode the verifier's cost is real local compute** standing in for an LLM round trip. The
    300 ms budget is enforced against genuine work — nothing sleeps to simulate a delay.
 6. **Single process, in-memory state.** Cost baselines, the adaptive gate and the SSE bus live in one
    process; the ledger and labels are on disk.
-7. **The ledger's threat model is two-shaped.** A hash chain catches a record that was *altered* or
-   *reordered*. It cannot see a record that was *removed from the end* — deleting the tail leaves a
-   shorter chain that verifies perfectly, and needs neither a rewrite nor a re-chain. So the ledger
-   also records how long the chain should be and what its head should be, in two places the chain
-   does not govern: a checkpoint table and a sidecar file beside the database. `make tamper-demo`
-   demonstrates both attacks being caught. What this does *not* defend against is an operator who
-   updates all three consistently; that needs an external anchor, and `AEGIS_LEDGER_KEY` is the
-   hook for it.
+7. **The ledger's threat model is two-shaped.** A hash chain catches an *altered* or *reordered*
+   record, but not one *removed from the end* — a truncated chain verifies perfectly. So the ledger
+   also records its expected length and head in two places the chain does not govern: a checkpoint
+   table and a sidecar file. `make tamper-demo` catches both attacks. It does *not* defend against an
+   operator who updates all three consistently; that needs an external anchor, and
+   `AEGIS_LEDGER_KEY` is the hook for it.
 
 ---
 
