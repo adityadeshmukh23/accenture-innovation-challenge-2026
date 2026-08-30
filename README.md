@@ -20,7 +20,7 @@ dashboard at <http://127.0.0.1:8000>. It runs entirely offline — no API key, n
 
 | | |
 |---|---|
-| **Demo video (2–3 min)** | ⚠️ **NOT YET RECORDED — replace this line with the hosted link before submitting.** Shot-by-shot script and storyboard: [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) |
+| **Demo video (2–3 min)** | <https://drive.google.com/file/d/1YZuDMAda0qflqeJNDB1kYrpFdGVIGQd1/view?usp=sharing> |
 | **Business proposal deck** | [`docs/AEGIS_R2_Business_Proposal.pptx`](docs/AEGIS_R2_Business_Proposal.pptx) — 14 slides, on the Round 1 template |
 | **Public repository** | <https://github.com/adityadeshmukh23/accenture-innovation-challenge-2026> |
 
@@ -643,7 +643,7 @@ aegis/            gateway package (api, risk, evidence, decision, adaptive, feed
 policies/         use-case policies + geography overlays
 scenarios/        seeds.yaml (evaluation + calibration) and the corpus documents
 tests/            <!--m:test_count-->96<!--/m--> tests, including the no-leakage proof
-docs/             demo video script and storyboard
+docs/             business-proposal deck (+ the R1 deck it was built from), reference metrics snapshot
 scripts/          demo runner, long-document generator
 ```
 

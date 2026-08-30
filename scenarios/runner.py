@@ -213,7 +213,7 @@ async def run(base: str, settle: float, verbose: bool, background: int = 36) -> 
         m = (await client.get(f"{base}/api/metrics")).json()
         print_scorecard(m)
 
-        # Emit the run's metrics so the README and demo script can be GENERATED
+        # Emit the run's metrics so the README can be GENERATED
         # from them instead of transcribed by hand. Hand-copied figures drift:
         # this repo shipped a requirements table claiming "p95 6.0ms, 98%" while
         # the metrics table forty lines below said 124ms and 96%.

@@ -22,7 +22,7 @@ help:
 	@echo "                      running gateway and print the scorecard."
 	@echo "  make fit            Re-fit the calibrated lane models from the corpus."
 	@echo "  make test           Run the unit + end-to-end test suite."
-	@echo "  make sync-docs      Regenerate the README/demo-script figures from the"
+	@echo "  make sync-docs      Regenerate the README figures from the"
 	@echo "                      last run's data/metrics.json. Machine-dependent"
 	@echo "                      figures keep their reference values; re-baseline"
 	@echo "                      them with: make sync-docs REBASE=--rebase-reference"

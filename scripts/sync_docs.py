@@ -1,4 +1,4 @@
-"""Generate the figures in README.md and docs/DEMO_SCRIPT.md from a real run.
+"""Generate the figures in README.md from a real run.
 
 Every drift-prone number in the docs is wrapped in a marker:
 
@@ -42,7 +42,11 @@ LIVE_METRICS = ROOT / "data" / "metrics.json"
 #: Committed snapshot of the reference run, so the figures can be verified from
 #: a clean clone before anyone has run `make demo`. A live run supersedes it.
 REFERENCE_METRICS = ROOT / "docs" / "reference_metrics.json"
-DOCS = [ROOT / "README.md", ROOT / "docs" / "DEMO_SCRIPT.md"]
+#: The demo shot-list markdown that used to live under docs/ was removed once
+#: the video was recorded and hosted. README.md is the only surviving
+#: marker-bearing doc; the loops below are written generically over DOCS so
+#: re-adding a second doc needs no other change.
+DOCS = [ROOT / "README.md"]
 
 
 def metrics_path() -> Path | None:
