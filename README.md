@@ -14,6 +14,16 @@ lane models from the labelled corpus, starts the gateway, replays <!--m:scenario
 benign background requests, verifies the audit ledger with a standalone tool, and leaves the
 dashboard at <http://127.0.0.1:8000>. It runs entirely offline — no API key, no network, no Docker.
 
+**Platforms:** macOS and Linux, Python 3.11+ (tested on 3.12.2). Nothing in the code is
+platform-specific — pure Python plus FastAPI/httpx/pydantic/numpy, all with prebuilt Windows
+wheels — but `make demo` itself is a bash script. **On Windows, use WSL** (check with
+`wsl --version`); Git Bash alone usually will not run it, because a native-Windows Python venv
+lays out as `.venv\Scripts\`, not `.venv\bin\`, which the Makefile assumes. Without WSL, skip
+`make` and run the four steps directly with `python -m ...` — see
+[Individual targets](#individual-targets) — substituting `.venv\Scripts\python` for
+`.venv/bin/python`; that path works in PowerShell or cmd with no WSL at all. If none of that is
+convenient, the [demo video](#submission-links) shows the exact same run, narrated end to end.
+
 ---
 
 ## Submission links
@@ -368,6 +378,18 @@ make clean           # remove venv, data and caches
 ```
 
 Run on a different port with `make demo PORT=8010`.
+
+**Without `make`** — every target is one `python -m` invocation; this is also the whole of what
+`demo.sh` does, run by hand in any shell, including native Windows PowerShell or cmd (swap
+`.venv/bin/python` for `.venv\Scripts\python`):
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
+.venv/bin/python -m aegis.feedback.trainer --fit                    # make fit
+.venv/bin/python -m uvicorn aegis.main:app --host 127.0.0.1 --port 8000   # make run, in its own shell
+.venv/bin/python -m scenarios.runner --base-url http://127.0.0.1:8000     # make scenarios
+.venv/bin/python -m aegis.tools.verify_ledger                       # make verify-ledger
+```
 
 ### Sending your own request
 

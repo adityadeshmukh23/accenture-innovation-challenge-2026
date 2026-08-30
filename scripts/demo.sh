@@ -19,7 +19,30 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+# lsof is standard on macOS/Linux/WSL but is not bundled with Git for Windows'
+# MSYS2 toolset, and bash is the only thing this script actually requires --
+# so fall back to a one-line Python port probe rather than hard-failing on a
+# missing Unix tool the rest of the script never needed.
+port_busy() {
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1
+  else
+    "$PY" -c "
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    s.bind(('$HOST', $PORT))
+except OSError:
+    sys.exit(0)
+else:
+    sys.exit(1)
+finally:
+    s.close()
+"
+  fi
+}
+
+if port_busy; then
   echo "port ${PORT} is already in use — stop that process or run: make demo PORT=8010"
   exit 1
 fi
