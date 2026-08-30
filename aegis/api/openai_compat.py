@@ -20,6 +20,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from ..backends.openai_backend import UpstreamError
 from ..gateway.pipeline import run_pipeline, run_streamed
 from ..types import new_id
 
@@ -48,6 +49,22 @@ def _envelope(decision, model: str, include_raw_trace: bool = False) -> dict[str
     }
 
 
+def _upstream_failure(exc: UpstreamError) -> JSONResponse:
+    """Report an upstream that would not answer, without pretending it did.
+
+    502 rather than 500: the gateway is fine, the model behind it is not, and a
+    caller needs to tell those apart to decide whether retrying is sensible.
+    There is deliberately no `aegis` block -- no response was generated, so
+    there is nothing to have adjudicated, and emitting a decision here would
+    manufacture a verdict about text that does not exist.
+    """
+    return JSONResponse(
+        status_code=502,
+        content={"error": {"type": "upstream_error", "message": str(exc),
+                           "upstream_status": exc.status, "retryable": exc.retryable}},
+    )
+
+
 @router.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     body = await request.json()
@@ -58,22 +75,36 @@ async def chat_completions(request: Request):
     raw_trace = _raw_trace_opt_in(body)
 
     if not want_stream:
-        decision = await run_pipeline(body, headers)
+        try:
+            decision = await run_pipeline(body, headers)
+        except UpstreamError as exc:
+            return _upstream_failure(exc)
         return JSONResponse(_envelope(decision, model, raw_trace))
 
     async def gen():
         cid = new_id("chatcmpl")
         final = None
-        async for chunk, done, decision in run_streamed(body, headers):
-            if done:
-                final = decision
-                break
-            payload = {
-                "id": cid, "object": "chat.completion.chunk", "created": int(time.time()),
-                "model": model,
-                "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
-            }
-            yield f"data: {json.dumps(payload)}\n\n"
+        try:
+            async for chunk, done, decision in run_streamed(body, headers):
+                if done:
+                    final = decision
+                    break
+                payload = {
+                    "id": cid, "object": "chat.completion.chunk", "created": int(time.time()),
+                    "model": model,
+                    "choices": [{"index": 0, "delta": {"content": chunk},
+                                 "finish_reason": None}],
+                }
+                yield f"data: {json.dumps(payload)}\n\n"
+        except UpstreamError as exc:
+            # The 200 and its headers are already on the wire by the time the
+            # upstream fails, so the status code cannot be corrected. Say so
+            # in-band and end the stream rather than truncating silently.
+            err = {"error": {"type": "upstream_error", "message": str(exc),
+                             "upstream_status": exc.status, "retryable": exc.retryable}}
+            yield f"data: {json.dumps(err)}\n\n"
+            yield "data: [DONE]\n\n"
+            return
         tail = {
             "id": cid, "object": "chat.completion.chunk", "created": int(time.time()),
             "model": model,

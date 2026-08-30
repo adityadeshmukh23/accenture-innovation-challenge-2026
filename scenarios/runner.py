@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 import uuid
@@ -18,6 +19,14 @@ import httpx
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _rel(p: Path) -> str:
+    """Repo-relative when it can be, absolute when the data dir is elsewhere."""
+    try:
+        return str(p.relative_to(ROOT))
+    except ValueError:
+        return str(p)
 SEEDS = ROOT / "scenarios" / "seeds.yaml"
 
 #: A fresh client identity per replay. Without it, a second `make scenarios`
@@ -63,8 +72,17 @@ def build_body(seeds: dict, sc: dict) -> dict:
 
 
 async def send(client: httpx.AsyncClient, base: str, body: dict) -> dict:
+    """The decision envelope, or a marker saying the upstream never answered.
+
+    Against the offline mock every request produces a response, so the replay
+    could assume one. A live provider can refuse -- rate limit, or a document
+    larger than its context window -- and that is a fact about the run worth
+    recording, not a reason to abandon the other fifty requests.
+    """
     if not body.get("stream"):
         r = await client.post(f"{base}/v1/chat/completions", json=body, timeout=60.0)
+        if r.status_code == 502:
+            return {"upstream_error": (r.json().get("error") or {}).get("message", "upstream failed")}
         r.raise_for_status()
         return r.json()["aegis"]
 
@@ -120,7 +138,9 @@ async def send_background(client: httpx.AsyncClient, base: str, seeds: dict, n: 
                 "client_id": f"background-{RUN_ID}-{i % 7}",
             },
         }
-        await client.post(f"{base}/v1/chat/completions", json=body, timeout=30.0)
+        # A live provider may rate-limit part of the priming traffic; the
+        # baselines it warms are still worth whatever did get through.
+        await client.post(f"{base}/v1/chat/completions", json=body, timeout=60.0)
 
 
 async def run(base: str, settle: float, verbose: bool, background: int = 36) -> int:
@@ -154,12 +174,18 @@ async def run(base: str, settle: float, verbose: bool, background: int = 36) -> 
               f"{'conf':5s} {'budget':13s} {'verif':6s} {'expect':7s} {'ok'}{RESET}")
         print("-" * 108)
 
-        results = []
+        results, unevaluable = [], []
         for sc in scenarios:
             body = build_body(seeds, sc)
             t0 = time.perf_counter()
             aegis = await send(client, base, body)
             wall = (time.perf_counter() - t0) * 1000.0
+            if aegis.get("upstream_error"):
+                unevaluable.append((sc["id"], aegis["upstream_error"]))
+                print(f"{sc['id']:28s} {sc['use_case']:17s} {'-':5s} "
+                      f"{'UPSTREAM':9s} {'':5s}  {'':13s} {'':6s} {'':7s} "
+                      f"— {aegis['upstream_error'][:60]}")
+                continue
             results.append((sc, aegis, wall))
 
             b = aegis.get("budget") or {}
@@ -179,6 +205,12 @@ async def run(base: str, settle: float, verbose: bool, background: int = 36) -> 
                     print(f"{DIM}      [{c['verdict']:12s}] {c['claim'][:70]}{RESET}")
                     for r in c["reasons"][:2]:
                         print(f"{DIM}          - {r}{RESET}")
+
+        if unevaluable:
+            print(f"\n{DIM}{len(unevaluable)} scenario(s) the upstream could not answer, "
+                  f"excluded from the scorecard rather than scored as failures:{RESET}")
+            for sid, why in unevaluable:
+                print(f"{DIM}    {sid}: {why[:96]}{RESET}")
 
         print(f"\n{DIM}waiting {settle:.1f}s for asynchronous deep passes to settle…{RESET}")
         await asyncio.sleep(settle)
@@ -217,12 +249,16 @@ async def run(base: str, settle: float, verbose: bool, background: int = 36) -> 
         # from them instead of transcribed by hand. Hand-copied figures drift:
         # this repo shipped a requirements table claiming "p95 6.0ms, 98%" while
         # the metrics table forty lines below said 124ms and 96%.
-        out = ROOT / "data" / "metrics.json"
+        # Honour AEGIS_DATA_DIR like every other artifact this run produces.
+        # Hardcoding ROOT/data meant two runs pointed at different data dirs --
+        # a mock baseline and a live-provider comparison, say -- silently wrote
+        # their metrics over each other.
+        out = Path(os.environ.get("AEGIS_DATA_DIR", ROOT / "data")) / "metrics.json"
         out.parent.mkdir(parents=True, exist_ok=True)
         m["generated_at"] = time.time()
         m["scenario_count"] = len(scenarios)
         out.write_text(json.dumps(m, indent=2, sort_keys=True))
-        print(f"\n{DIM}  metrics written to {out.relative_to(ROOT)} "
+        print(f"\n{DIM}  metrics written to {_rel(out)} "
               f"(run `make sync-docs` to refresh the README figures){RESET}")
 
         integrity = (await client.get(f"{base}/v1/control/ledger/verify")).json()

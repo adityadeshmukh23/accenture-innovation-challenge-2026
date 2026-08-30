@@ -1,0 +1,734 @@
+{
+  "backend": "groq",
+  "live": {
+    "adaptive": {
+      "by_policy": {
+        "clinical_intake": {
+          "held": 6,
+          "rate": 1.0,
+          "verified": 6
+        },
+        "fintech_advisor": {
+          "held": 6,
+          "rate": 1.0,
+          "verified": 6
+        },
+        "support_copilot": {
+          "held": 38,
+          "rate": 0.0526,
+          "verified": 2
+        }
+      },
+      "flagged_among_verified": 10,
+      "held_requests": 50,
+      "performance_positives_in_set": 8,
+      "scheduler": {
+        "clinical_intake": {
+          "gate_threshold": 0.27,
+          "observed_verifier_rate": 1.0,
+          "window": 12
+        },
+        "fintech_advisor": {
+          "gate_threshold": 0.312,
+          "observed_verifier_rate": 1.0,
+          "window": 12
+        },
+        "support_copilot": {
+          "gate_threshold": 1.0,
+          "observed_verifier_rate": 0.5667,
+          "window": 60
+        }
+      },
+      "verifier_invocation_rate": 0.28,
+      "verifier_runs": 14
+    },
+    "baselines": {
+      "clinical_intake:openai/gpt-oss-120b:completion": {
+        "mean": 200.59,
+        "n": 6,
+        "sd": 83.64
+      },
+      "clinical_intake:openai/gpt-oss-120b:latency": {
+        "mean": 3205.36,
+        "n": 6,
+        "sd": 550.89
+      },
+      "clinical_intake:openai/gpt-oss-120b:total": {
+        "mean": 525.24,
+        "n": 6,
+        "sd": 116.49
+      },
+      "fintech_advisor:openai/gpt-oss-120b:completion": {
+        "mean": 137.36,
+        "n": 6,
+        "sd": 61.89
+      },
+      "fintech_advisor:openai/gpt-oss-120b:latency": {
+        "mean": 3139.64,
+        "n": 6,
+        "sd": 544.47
+      },
+      "fintech_advisor:openai/gpt-oss-120b:total": {
+        "mean": 538.31,
+        "n": 6,
+        "sd": 104.92
+      },
+      "support_copilot:openai/gpt-oss-120b:completion": {
+        "mean": 86.25,
+        "n": 38,
+        "sd": 31.65
+      },
+      "support_copilot:openai/gpt-oss-120b:latency": {
+        "mean": 2235.41,
+        "n": 38,
+        "sd": 1309.05
+      },
+      "support_copilot:openai/gpt-oss-120b:total": {
+        "mean": 404.59,
+        "n": 38,
+        "sd": 34.9
+      }
+    },
+    "calibration": {
+      "base_rate": 0.2778,
+      "brier": 0.2256,
+      "ece": 0.2274,
+      "n": 54
+    },
+    "cost": {
+      "estimated_cost_per_request_usd": 0.00011754,
+      "estimated_total_usd": 0.006347,
+      "verifier_token_share": 0.2383,
+      "verifier_tokens_total": 5524
+    },
+    "cost_model": {
+      "bias_async": {
+        "admission_estimate_ms": 0.29,
+        "mean_ms": 0.12,
+        "samples": 54
+      },
+      "cheap_signals": {
+        "admission_estimate_ms": 1.53,
+        "mean_ms": 0.81,
+        "samples": 104
+      },
+      "context_prep": {
+        "admission_estimate_ms": 0.28,
+        "mean_ms": 0.14,
+        "samples": 104
+      },
+      "cost_telemetry": {
+        "admission_estimate_ms": 0.2,
+        "mean_ms": 0.06,
+        "samples": 104
+      },
+      "fusion": {
+        "admission_estimate_ms": 1.54,
+        "mean_ms": 0.6,
+        "samples": 50
+      },
+      "responsibility_inline": {
+        "admission_estimate_ms": 0.84,
+        "mean_ms": 0.32,
+        "samples": 104
+      },
+      "verifier": {
+        "admission_estimate_ms": 2.76,
+        "mean_ms": 1.53,
+        "samples": 136
+      },
+      "verifier_params": {
+        "index_ms_per_sentence": 0.00234,
+        "scan_ms_per_sentence_claim": 4.3e-05
+      }
+    },
+    "counts": {
+      "escalated": 12,
+      "green": 38,
+      "held": 50,
+      "human_feedback": 0,
+      "ledger_records": 108,
+      "post_hoc_flagged": 0,
+      "red": 12,
+      "requests": 54,
+      "retracted": 0,
+      "streamed": 4,
+      "with_ground_truth": 18,
+      "yellow": 4
+    },
+    "generated_at": 1788100036.9038,
+    "labels": {
+      "seeded_corpus": 65
+    },
+    "lanes": {
+      "cost": {
+        "f1": 1.0,
+        "false_negative_rate": 0.0,
+        "false_positive_rate": 0.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 18,
+        "tn": 17,
+        "tp": 1
+      },
+      "performance": {
+        "f1": 0.5556,
+        "false_negative_rate": 0.375,
+        "false_positive_rate": 0.5,
+        "fn": 3,
+        "fp": 5,
+        "precision": 0.5,
+        "recall": 0.625,
+        "support": 18,
+        "tn": 5,
+        "tp": 5
+      },
+      "responsibility": {
+        "f1": 0.6,
+        "false_negative_rate": 0.5,
+        "false_positive_rate": 0.0833,
+        "fn": 3,
+        "fp": 1,
+        "precision": 0.75,
+        "recall": 0.5,
+        "support": 18,
+        "tn": 11,
+        "tp": 3
+      }
+    },
+    "lanes_inline": {
+      "cost": {
+        "f1": 1.0,
+        "false_negative_rate": 0.0,
+        "false_positive_rate": 0.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 18,
+        "tn": 17,
+        "tp": 1
+      },
+      "performance": {
+        "f1": 0.5556,
+        "false_negative_rate": 0.375,
+        "false_positive_rate": 0.5,
+        "fn": 3,
+        "fp": 5,
+        "precision": 0.5,
+        "recall": 0.625,
+        "support": 18,
+        "tn": 5,
+        "tp": 5
+      },
+      "responsibility": {
+        "f1": 0.6,
+        "false_negative_rate": 0.5,
+        "false_positive_rate": 0.0833,
+        "fn": 3,
+        "fp": 1,
+        "precision": 0.75,
+        "recall": 0.5,
+        "support": 18,
+        "tn": 11,
+        "tp": 3
+      }
+    },
+    "latency": {
+      "budget_exceeded": 0,
+      "budget_exhausted": 0,
+      "budget_exhausted_rate": 0.0,
+      "inline_overhead_max_ms": 15.11,
+      "inline_overhead_p50_ms": 1.98,
+      "inline_overhead_p95_ms": 8.24,
+      "overhead_pct_of_budget_p95": 2.7,
+      "streamed_inline_overhead_ms": 0.0,
+      "total_p50_ms": 958.07,
+      "total_p95_ms": 3525.79,
+      "upstream_p50_ms": 955.35,
+      "within_budget": 50,
+      "within_budget_rate": 1.0
+    },
+    "models": {
+      "cost": {
+        "fitted": true,
+        "l2": 0.03,
+        "metrics": {
+          "brier": 0.0162,
+          "cv_logloss_by_l2": {
+            "0.03": 0.174,
+            "0.1": 0.1803,
+            "0.3": 0.1968,
+            "1.0": 0.2394,
+            "10.0": 0.3437,
+            "3.0": 0.2972
+          },
+          "ece": 0.0155,
+          "final_loss": 0.1089,
+          "fn": 1.0,
+          "fp": 0.0,
+          "l2": 0.03,
+          "tn": 57.0,
+          "tp": 7.0,
+          "train_precision": 1.0,
+          "train_recall": 0.875,
+          "weight_norm": 9.6389
+        },
+        "n_train": 65
+      },
+      "performance": {
+        "fitted": true,
+        "l2": 0.3,
+        "metrics": {
+          "brier": 0.0355,
+          "cv_logloss_by_l2": {
+            "0.03": 0.2405,
+            "0.1": 0.2265,
+            "0.3": 0.2176,
+            "1.0": 0.2221,
+            "10.0": 0.3378,
+            "3.0": 0.2579
+          },
+          "ece": 0.0529,
+          "final_loss": 0.1797,
+          "fn": 2.0,
+          "fp": 1.0,
+          "l2": 0.3,
+          "tn": 52.0,
+          "tp": 10.0,
+          "train_precision": 0.9091,
+          "train_recall": 0.8333,
+          "weight_norm": 3.8293
+        },
+        "n_train": 65
+      },
+      "responsibility": {
+        "fitted": true,
+        "l2": 0.03,
+        "metrics": {
+          "brier": 0.0048,
+          "cv_logloss_by_l2": {
+            "0.03": 0.1164,
+            "0.1": 0.1516,
+            "0.3": 0.2248,
+            "1.0": 0.3265,
+            "10.0": 0.4527,
+            "3.0": 0.4062
+          },
+          "ece": 0.0367,
+          "final_loss": 0.0822,
+          "fn": 0.0,
+          "fp": 0.0,
+          "l2": 0.03,
+          "tn": 53.0,
+          "tp": 12.0,
+          "train_precision": 1.0,
+          "train_recall": 1.0,
+          "weight_norm": 13.5923
+        },
+        "n_train": 65
+      }
+    },
+    "overall": {
+      "correct": 8,
+      "decision_accuracy": 0.4444,
+      "inline_correct": 8,
+      "inline_decision_accuracy": 0.4444,
+      "scored": 18
+    },
+    "scenario_count": 21
+  },
+  "mock": {
+    "adaptive": {
+      "by_policy": {
+        "batch_analytics": {
+          "held": 1,
+          "rate": 1.0,
+          "verified": 1
+        },
+        "clinical_intake": {
+          "held": 6,
+          "rate": 1.0,
+          "verified": 6
+        },
+        "default": {
+          "held": 2,
+          "rate": 1.0,
+          "verified": 2
+        },
+        "fintech_advisor": {
+          "held": 6,
+          "rate": 1.0,
+          "verified": 6
+        },
+        "support_copilot": {
+          "held": 38,
+          "rate": 0.0526,
+          "verified": 2
+        }
+      },
+      "flagged_among_verified": 9,
+      "held_requests": 53,
+      "performance_positives_in_set": 11,
+      "scheduler": {
+        "batch_analytics": {
+          "gate_threshold": 0.0,
+          "observed_verifier_rate": 1.0,
+          "window": 2
+        },
+        "clinical_intake": {
+          "gate_threshold": 0.27,
+          "observed_verifier_rate": 1.0,
+          "window": 12
+        },
+        "default": {
+          "gate_threshold": 0.25,
+          "observed_verifier_rate": 1.0,
+          "window": 4
+        },
+        "fintech_advisor": {
+          "gate_threshold": 0.312,
+          "observed_verifier_rate": 1.0,
+          "window": 12
+        },
+        "support_copilot": {
+          "gate_threshold": 1.0,
+          "observed_verifier_rate": 0.5667,
+          "window": 60
+        }
+      },
+      "verifier_invocation_rate": 0.3208,
+      "verifier_runs": 17
+    },
+    "baselines": {
+      "batch_analytics:aegis-mock-1:completion": {
+        "mean": 279.0,
+        "n": 1,
+        "sd": 69.75
+      },
+      "batch_analytics:aegis-mock-1:latency": {
+        "mean": 81.35,
+        "n": 1,
+        "sd": 20.34
+      },
+      "batch_analytics:aegis-mock-1:total": {
+        "mean": 143395.0,
+        "n": 1,
+        "sd": 35848.75
+      },
+      "clinical_intake:aegis-mock-1:completion": {
+        "mean": 62.19,
+        "n": 6,
+        "sd": 23.01
+      },
+      "clinical_intake:aegis-mock-1:latency": {
+        "mean": 56.17,
+        "n": 6,
+        "sd": 11.99
+      },
+      "clinical_intake:aegis-mock-1:total": {
+        "mean": 377.46,
+        "n": 6,
+        "sd": 69.33
+      },
+      "default:aegis-mock-1:completion": {
+        "mean": 257.7,
+        "n": 2,
+        "sd": 81.89
+      },
+      "default:aegis-mock-1:latency": {
+        "mean": 78.08,
+        "n": 2,
+        "sd": 20.38
+      },
+      "default:aegis-mock-1:total": {
+        "mean": 143372.95,
+        "n": 2,
+        "sd": 33050.96
+      },
+      "fintech_advisor:aegis-mock-1:completion": {
+        "mean": 38.05,
+        "n": 6,
+        "sd": 7.8
+      },
+      "fintech_advisor:aegis-mock-1:latency": {
+        "mean": 47.86,
+        "n": 6,
+        "sd": 11.27
+      },
+      "fintech_advisor:aegis-mock-1:total": {
+        "mean": 396.01,
+        "n": 6,
+        "sd": 66.16
+      },
+      "support_copilot:aegis-mock-1:completion": {
+        "mean": 363.2,
+        "n": 38,
+        "sd": 855.12
+      },
+      "support_copilot:aegis-mock-1:latency": {
+        "mean": 137.47,
+        "n": 38,
+        "sd": 193.19
+      },
+      "support_copilot:aegis-mock-1:total": {
+        "mean": 662.08,
+        "n": 38,
+        "sd": 863.22
+      }
+    },
+    "calibration": {
+      "base_rate": 0.2857,
+      "brier": 0.0731,
+      "ece": 0.0997,
+      "n": 63
+    },
+    "cost": {
+      "estimated_cost_per_request_usd": 0.00236891,
+      "estimated_total_usd": 0.135028,
+      "verifier_token_share": 0.9643,
+      "verifier_tokens_total": 434982
+    },
+    "cost_model": {
+      "bias_async": {
+        "admission_estimate_ms": 0.31,
+        "mean_ms": 0.16,
+        "samples": 57
+      },
+      "cheap_signals": {
+        "admission_estimate_ms": 24.29,
+        "mean_ms": 12.14,
+        "samples": 110
+      },
+      "context_prep": {
+        "admission_estimate_ms": 48.03,
+        "mean_ms": 23.5,
+        "samples": 110
+      },
+      "cost_telemetry": {
+        "admission_estimate_ms": 0.06,
+        "mean_ms": 0.03,
+        "samples": 110
+      },
+      "fusion": {
+        "admission_estimate_ms": 0.43,
+        "mean_ms": 0.26,
+        "samples": 53
+      },
+      "responsibility_inline": {
+        "admission_estimate_ms": 0.86,
+        "mean_ms": 0.51,
+        "samples": 110
+      },
+      "verifier": {
+        "admission_estimate_ms": 482.11,
+        "mean_ms": 313.18,
+        "samples": 148
+      },
+      "verifier_params": {
+        "index_ms_per_sentence": 0.02718,
+        "scan_ms_per_sentence_claim": 0.000498
+      }
+    },
+    "counts": {
+      "escalated": 9,
+      "green": 46,
+      "held": 53,
+      "human_feedback": 0,
+      "ledger_records": 114,
+      "post_hoc_flagged": 5,
+      "red": 9,
+      "requests": 57,
+      "retracted": 1,
+      "streamed": 4,
+      "with_ground_truth": 21,
+      "yellow": 2
+    },
+    "generated_at": 1788099867.372972,
+    "labels": {
+      "seeded_corpus": 65
+    },
+    "lanes": {
+      "cost": {
+        "f1": 1.0,
+        "false_negative_rate": 0.0,
+        "false_positive_rate": 0.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 21,
+        "tn": 20,
+        "tp": 1
+      },
+      "performance": {
+        "f1": 0.9565,
+        "false_negative_rate": 0.0,
+        "false_positive_rate": 0.1,
+        "fn": 0,
+        "fp": 1,
+        "precision": 0.9167,
+        "recall": 1.0,
+        "support": 21,
+        "tn": 9,
+        "tp": 11
+      },
+      "responsibility": {
+        "f1": 1.0,
+        "false_negative_rate": 0.0,
+        "false_positive_rate": 0.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 21,
+        "tn": 15,
+        "tp": 6
+      }
+    },
+    "lanes_inline": {
+      "cost": {
+        "f1": 1.0,
+        "false_negative_rate": 0.0,
+        "false_positive_rate": 0.0,
+        "fn": 0,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "support": 21,
+        "tn": 20,
+        "tp": 1
+      },
+      "performance": {
+        "f1": 0.8,
+        "false_negative_rate": 0.2727,
+        "false_positive_rate": 0.1,
+        "fn": 3,
+        "fp": 1,
+        "precision": 0.8889,
+        "recall": 0.7273,
+        "support": 21,
+        "tn": 9,
+        "tp": 8
+      },
+      "responsibility": {
+        "f1": 0.9091,
+        "false_negative_rate": 0.1667,
+        "false_positive_rate": 0.0,
+        "fn": 1,
+        "fp": 0,
+        "precision": 1.0,
+        "recall": 0.8333,
+        "support": 21,
+        "tn": 15,
+        "tp": 5
+      }
+    },
+    "latency": {
+      "budget_exceeded": 2,
+      "budget_exhausted": 2,
+      "budget_exhausted_rate": 0.0377,
+      "inline_overhead_max_ms": 403.74,
+      "inline_overhead_p50_ms": 2.41,
+      "inline_overhead_p95_ms": 125.44,
+      "overhead_pct_of_budget_p95": 2.0,
+      "streamed_inline_overhead_ms": 0.0,
+      "total_p50_ms": 63.84,
+      "total_p95_ms": 399.9,
+      "upstream_p50_ms": 61.66,
+      "within_budget": 51,
+      "within_budget_rate": 0.9623
+    },
+    "models": {
+      "cost": {
+        "fitted": true,
+        "l2": 0.03,
+        "metrics": {
+          "brier": 0.0162,
+          "cv_logloss_by_l2": {
+            "0.03": 0.174,
+            "0.1": 0.1803,
+            "0.3": 0.1968,
+            "1.0": 0.2394,
+            "10.0": 0.3437,
+            "3.0": 0.2972
+          },
+          "ece": 0.0155,
+          "final_loss": 0.1089,
+          "fn": 1.0,
+          "fp": 0.0,
+          "l2": 0.03,
+          "tn": 57.0,
+          "tp": 7.0,
+          "train_precision": 1.0,
+          "train_recall": 0.875,
+          "weight_norm": 9.6389
+        },
+        "n_train": 65
+      },
+      "performance": {
+        "fitted": true,
+        "l2": 0.3,
+        "metrics": {
+          "brier": 0.0355,
+          "cv_logloss_by_l2": {
+            "0.03": 0.2405,
+            "0.1": 0.2265,
+            "0.3": 0.2176,
+            "1.0": 0.2221,
+            "10.0": 0.3378,
+            "3.0": 0.2579
+          },
+          "ece": 0.0529,
+          "final_loss": 0.1797,
+          "fn": 2.0,
+          "fp": 1.0,
+          "l2": 0.3,
+          "tn": 52.0,
+          "tp": 10.0,
+          "train_precision": 0.9091,
+          "train_recall": 0.8333,
+          "weight_norm": 3.8293
+        },
+        "n_train": 65
+      },
+      "responsibility": {
+        "fitted": true,
+        "l2": 0.03,
+        "metrics": {
+          "brier": 0.0048,
+          "cv_logloss_by_l2": {
+            "0.03": 0.1164,
+            "0.1": 0.1516,
+            "0.3": 0.2248,
+            "1.0": 0.3265,
+            "10.0": 0.4527,
+            "3.0": 0.4062
+          },
+          "ece": 0.0367,
+          "final_loss": 0.0822,
+          "fn": 0.0,
+          "fp": 0.0,
+          "l2": 0.03,
+          "tn": 53.0,
+          "tp": 12.0,
+          "train_precision": 1.0,
+          "train_recall": 1.0,
+          "weight_norm": 13.5923
+        },
+        "n_train": 65
+      }
+    },
+    "overall": {
+      "correct": 20,
+      "decision_accuracy": 0.9524,
+      "inline_correct": 17,
+      "inline_decision_accuracy": 0.8095,
+      "scored": 21
+    },
+    "scenario_count": 21
+  },
+  "model": "(provider default)"
+}

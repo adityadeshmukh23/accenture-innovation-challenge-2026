@@ -20,6 +20,25 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+#: Live upstream providers. Both speak the OpenAI chat-completions wire format,
+#: so they share one client -- the only differences are the endpoint, the key
+#: variable and the default model.
+LIVE_PROVIDERS = {
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "key_env": "OPENAI_API_KEY",
+    },
+    "groq": {
+        "base_url": "https://api.groq.com/openai/v1",
+        # Groq's catalogue moves; this is what the validation run used. Any
+        # chat model the account can reach works via AEGIS_UPSTREAM_MODEL.
+        "model": "openai/gpt-oss-120b",
+        "key_env": "GROQ_API_KEY",
+    },
+}
+
+
 @dataclass
 class Settings:
     backend: str = field(default_factory=lambda: _env("AEGIS_BACKEND", "mock"))
@@ -31,13 +50,34 @@ class Settings:
     policy_dir: Path = field(default_factory=lambda: REPO_ROOT / "policies")
     scenario_dir: Path = field(default_factory=lambda: REPO_ROOT / "scenarios")
 
-    # Real-upstream settings, only consulted when backend == "openai".
+    # Real-upstream settings, only consulted when backend is a live provider.
+    #
+    # Two live providers share one transport because Groq serves the OpenAI
+    # chat-completions wire format: only the base URL, the key variable and the
+    # model names differ. Adding a provider is therefore a table entry, not a
+    # second client -- which is the same claim the README makes about being
+    # model-agnostic, held to for real rather than asserted.
     upstream_base_url: str = field(
-        default_factory=lambda: _env("AEGIS_UPSTREAM_BASE_URL", "https://api.openai.com/v1")
+        default_factory=lambda: _env("AEGIS_UPSTREAM_BASE_URL", "")
     )
-    upstream_model: str = field(default_factory=lambda: _env("AEGIS_UPSTREAM_MODEL", "gpt-4o-mini"))
-    verifier_model: str = field(default_factory=lambda: _env("AEGIS_VERIFIER_MODEL", "gpt-4o-mini"))
-    api_key: str = field(default_factory=lambda: _env("OPENAI_API_KEY", ""))
+    upstream_model: str = field(default_factory=lambda: _env("AEGIS_UPSTREAM_MODEL", ""))
+    verifier_model: str = field(default_factory=lambda: _env("AEGIS_VERIFIER_MODEL", ""))
+    api_key: str = field(default_factory=lambda: _env("AEGIS_API_KEY", ""))
+
+    def __post_init__(self) -> None:
+        """Fill live-provider defaults for whichever provider was selected.
+
+        Explicit AEGIS_* env vars always win; these are only the fallbacks, so
+        a caller can point the Groq backend at a different model without
+        editing code.
+        """
+        provider = LIVE_PROVIDERS.get(self.backend)
+        if provider is None:
+            return
+        self.upstream_base_url = self.upstream_base_url or provider["base_url"]
+        self.upstream_model = self.upstream_model or provider["model"]
+        self.verifier_model = self.verifier_model or provider["model"]
+        self.api_key = self.api_key or _env(provider["key_env"], "")
 
     @property
     def ledger_path(self) -> Path:

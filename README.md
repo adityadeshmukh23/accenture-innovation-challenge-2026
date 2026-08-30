@@ -402,13 +402,66 @@ that redacts what it is auditing is worthless.
 ### Using a real model
 
 ```bash
-export AEGIS_BACKEND=openai
-export OPENAI_API_KEY=sk-...
+export AEGIS_BACKEND=groq        # or: openai
+export GROQ_API_KEY=gsk_...      # or: OPENAI_API_KEY=sk-...
 make demo
 ```
 
 Nothing in the pipeline changes: the gateway still sees `(question, context, response, telemetry)`.
-Only the source of the response and of the verifier's re-answer differ.
+Only the source of the response and of the verifier's re-answer differ. Both providers serve the
+OpenAI chat-completions wire format, so they share one client — a provider is a row in
+`LIVE_PROVIDERS`, not a second transport.
+
+### What a real model actually changed
+
+Every other number in this README comes from the offline mock. That makes them reproducible and
+leaves one question open, so the same request set was replayed against a live Groq-hosted model
+(`openai/gpt-oss-120b`). `python scripts/real_model_check.py --backend groq` reruns it; the full
+output is committed at [`docs/real_model_run.json`](docs/real_model_run.json).
+
+**This is a supplement, not a second evaluation.** With a live model the seeded `ground_truth`
+labels stop describing the text being checked — the model writes its own answer — so per-lane
+precision and recall are *not* reported for it. The seeded 21-scenario set above remains the only
+scored result.
+
+| | mock | groq | |
+|---|---|---|---|
+| requests | 57 | **54** | 3 unevaluable, below |
+| GREEN / YELLOW / RED | 46 / 2 / 9 | 38 / 4 / **12** | |
+| verifier gate, clinical / fintech / support | 6/6 · 6/6 · 2/38 | **6/6 · 6/6 · 2/38** | identical |
+| inline overhead p50 | 2.4 ms | **2.0 ms** | gateway cost unchanged |
+| upstream p50 | 62 ms | **955 ms** | the model, not the gateway |
+| end-to-end p95 | 400 ms | **3,526 ms** | |
+
+**What held.** The adaptive gate is backend-independent: it verified exactly the same proportion of
+each policy's traffic, which is the mechanism the efficiency claim rests on. AEGIS's own inline
+overhead stayed at ~2 ms even with a one-second upstream, so the 300 ms scrutiny budget is unaffected
+by a slow model — it bounds the gateway's work, not the round trip.
+
+**Two honest negatives.**
+
+1. **Three scenarios could not run at all.** `long_msa.txt` is ~143,000 tokens — 17.9× this
+   account's 8,000-token-per-minute ceiling — so `budget_miss_01`, `budget_miss_open_01` and
+   `batch_deep_01` returned HTTP 413 and were excluded rather than scored as failures. That removes
+   the `default` and `batch_analytics` policies from the live run entirely. The "anytime verification
+   over a 5,000-clause contract" result is a property of the **deterministic local** verifier; it
+   does not transfer to a hosted one without chunking the document first.
+2. **RED rose from 9/57 to 12/54, and the increase is in the *benign* traffic.** Seeded-scenario lane
+   flags actually fell (19 → 15), which locates the extra REDs in the 36 background requests — the
+   live model's ordinary answers tripped checks the seeded answers did not. On 36 unlabelled requests
+   that is a signal worth investigating, not a measured false-positive rate.
+
+Cost per request is not compared: the mock figure is an estimate dominated by those same 143k-token
+documents, and the live figure counts real provider tokens over a set that excludes them. The two
+are not measuring the same thing.
+
+**Three defects only a live provider exposed**, all fixed here: the gateway forwarded the client's
+`model` string verbatim, so every seeded request asked Groq for `aegis-mock-1` and got 404; an
+upstream failure propagated as an unhandled exception and became a 500 with a dropped connection,
+because the mock backend never fails and every call site had quietly assumed a response existed; and
+there was no retry or backoff, so a provider that meters tokens per minute took the run down. The
+gateway now returns a typed 502 that distinguishes *the model refused* from *the gateway broke*, and
+retries 429/5xx with jittered backoff honouring `Retry-After`.
 
 ---
 
@@ -643,6 +696,8 @@ listed as a known gap rather than something quietly folded into the numbers abov
 | The control endpoints have **no authentication**; `/v1/control/override` is rate-limited and guarded against contradicting checksum-grade detections, but anyone who can reach the port can still submit feedback under any operator name | operator identity and API keys, per-tenant policy binding, quotas |
 | Ledger checkpoint is stored next to the data it protects, so an operator with disk access who updates all three places (records, checkpoint table, sidecar file) is still undetected. Setting `AEGIS_LEDGER_KEY` adds an HMAC the checkpoint cannot be forged without | WORM storage or external anchoring — publish the head hash somewhere the operator does not control |
 | `docker-compose.yml` ships but is **untested** — Docker was unavailable on the development machine | verified container build in CI; `make demo` is the supported path today |
+| **A hosted verifier cannot take the 5,000-clause document.** Measured against Groq: ~143,000 tokens is 17.9× an 8,000 TPM ceiling, so three scenarios returned 413 and were excluded from the live run. The anytime-verification result holds for the deterministic local verifier only | chunked retrieval so the verifier sees passages rather than whole contracts, and a provider tier whose limits fit the documents |
+| **Upstream failure handling is new and lightly exercised.** Retry with jittered backoff on 429/5xx and a typed 502 otherwise; proven against a real rate limit, but not against sustained provider degradation, partial responses, or mid-stream failure after headers are sent | a circuit breaker per provider, and a decision about whether a held request should fail closed when the *upstream* is what failed |
 | Async deep pass runs on every response, doubling verifier compute | sampled for high-volume tiers; the policy field to control it already exists |
 
 ---

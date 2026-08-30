@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..config import SETTINGS
+from ..config import LIVE_PROVIDERS, SETTINGS
 from . import mock_llm
 
 
 async def generate(question: str, context: str, directive: dict[str, Any] | None = None,
                    model: str | None = None):
-    if SETTINGS.backend == "openai":
+    if SETTINGS.backend in LIVE_PROVIDERS:
         from . import openai_backend
         return await openai_backend.generate(question, context, directive, model)
     return await mock_llm.generate(question, context, directive, model or "aegis-mock-1")

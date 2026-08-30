@@ -170,13 +170,26 @@ def s_quality():
              "and a guard that fails the build if any documented figure drifts from the run.")]
     for x, (h, b) in zip(COL3, trio):
         S.append(card(x, 5.03, COL3W, 1.12, h, [run(b, 900)], tinted=False, hsz=1000))
-    S.append(shape("note", ML, 6.27, CW, 0.62,
+    S.append(shape("note", ML, 6.19, CW, 1.08,
                    [para([run("Reproducibility: ", 900, B, PURPLE),
                           run("every figure on this slide is deterministic — an independent "
                               "cold-clone run on different hardware reproduced all of them "
                               "exactly. Inline (pre-async) accuracy and wall-clock latency do "
                               "vary by machine, and are labelled as reference-machine "
                               "measurements wherever they appear.", 900, N, MUTED)],
+                         space_after=180, line_pct="110000"),
+                    para([run("Real-model supplement, not a replacement: ", 900, B, PURPLE),
+                          run("54 requests were also run against a live Groq-hosted model "
+                              "(openai/gpt-oss-120b). The adaptive gate behaved identically "
+                              "where comparable (100% on clinical and fintech, 2/38 on support) "
+                              "and inline overhead stayed at 2.0 ms while upstream latency rose "
+                              "62 ms → 955 ms. Two honest negatives: three scenarios were "
+                              "unevaluable because the 5,000-clause document exceeds the hosted "
+                              "model's token limit, and RED rose from 9/57 to 12/54 — an "
+                              "increase located in the benign background traffic, not the "
+                              "seeded set. This is a smaller, unlabelled check of whether the "
+                              "pipeline holds against a real model; the seeded evaluation "
+                              "above remains the rigorous result.", 900, N, MUTED)],
                          space_after=0, line_pct="110000")]))
     return slide(S)
 
