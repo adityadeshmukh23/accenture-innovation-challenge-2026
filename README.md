@@ -644,6 +644,15 @@ behind the same `ClaimTrace` interface — the trace structure and dashboard alr
 Widening the cue set is *not* the fix: it would convert these false negatives into false positives on
 ordinary hedged prose.
 
+**No concurrency or load evidence exists, and none is claimed.** Every figure in this README comes
+from a single process answering requests one after another — the reference run is 57 sequential
+requests, and the cost baselines, adaptive gate and SSE bus all live in that one process's memory.
+Throughput, concurrent-request behaviour and p99 under load have not been measured at all. The
+latency numbers above describe what one request costs when nothing else is in flight, which is not
+the same question a platform team asks before putting a gateway in a request path. Nothing here
+should be read as a scale claim. A load harness is prerequisite work for the pilot phase; it is
+listed as a known gap rather than something quietly folded into the numbers above.
+
 **Other honest limits:**
 
 | Limitation | What production would add |

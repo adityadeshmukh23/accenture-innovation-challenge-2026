@@ -215,10 +215,16 @@ def s_risks():
          "figure exactly and differed on inline accuracy and latency. Now handled as two "
          "documented tiers — deterministic figures enforced by the build, machine-dependent ones "
          "labelled and reported — rather than presented as one."),
+        ("No concurrency or load evidence: every figure here is a single process answering "
+         "sequential requests",
+         "Stated, not solved. The reference run is 57 requests issued one after another against "
+         "one process holding its baselines in memory. No throughput, concurrency or p99-under-"
+         "load figure has been measured, so nothing on these slides should be read as a scale "
+         "claim. A load harness is prerequisite work for the pilot, not a deadline item."),
     ]
-    y = 1.68
+    y = 1.60
     for i, (r, m) in enumerate(risks):
-        S.append(shape("risk", ML, y, CW, 0.80,
+        S.append(shape("risk", ML, y, CW, 0.78,
                        [para([run("RISK  ", 800, B, AMBER), run(r, 950, B, INK)],
                              space_after=250),
                         para([run("MITIGATION  ", 800, B, GREEN), run(m, 875, N, INK)],
@@ -226,5 +232,5 @@ def s_risks():
                        geom="roundRect", fill=TINT if i % 2 == 0 else WHITE,
                        line=None if i % 2 == 0 else MUTED, line_w=9525,
                        ins=(0.14, 0.07, 0.14, 0.05)))
-        y += 0.85
+        y += 0.83
     return slide(S)
