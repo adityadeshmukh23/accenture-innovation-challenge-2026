@@ -31,7 +31,7 @@ convenient, the [demo video](#submission-links) shows the exact same run, narrat
 | | |
 |---|---|
 | **Demo video (4:29)** | <https://drive.google.com/file/d/1md1tDBRoTOT6tDkL_owT2XkEVE-ToQis/view?usp=sharing> |
-| **Business proposal deck** | [`docs/AEGIS_R2_Business_Proposal.pptx`](docs/AEGIS_R2_Business_Proposal.pptx) — 14 slides, on the Round 1 template |
+| **Business proposal deck** | [`docs/AEGIS_R2_Business_Proposal.pptx`](docs/Team_D-top_ControlPlane.ai_R2.pptx) — 14 slides, on the Round 1 template |
 | **Public repository** | <https://github.com/adityadeshmukh23/accenture-innovation-challenge-2026> |
 
 The video walks the seeded RED case being flagged, held and rerouted live on the dashboard, the
