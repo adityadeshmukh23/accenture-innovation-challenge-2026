@@ -30,7 +30,7 @@ convenient, the [demo video](#submission-links) shows the exact same run, narrat
 
 | | |
 |---|---|
-| **Demo video (4:44)** | <https://drive.google.com/file/d/1YZuDMAda0qflqeJNDB1kYrpFdGVIGQd1/view?usp=sharing> |
+| **Demo video (4:29)** | <https://drive.google.com/file/d/1md1tDBRoTOT6tDkL_owT2XkEVE-ToQis/view?usp=sharing> |
 | **Business proposal deck** | [`docs/AEGIS_R2_Business_Proposal.pptx`](docs/AEGIS_R2_Business_Proposal.pptx) — 14 slides, on the Round 1 template |
 | **Public repository** | <https://github.com/adityadeshmukh23/accenture-innovation-challenge-2026> |
 
